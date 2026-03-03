@@ -570,10 +570,10 @@ internal fun LibraryFrontendPane(
     onFocusChanged: (LibraryItem?) -> Unit = {},
     onRefresh: () -> Unit = {},
     isAnyDialogOpen: Boolean = false,
-    onFrontendTabChanged: (Boolean) -> Unit = {},
+    onTabChanged: (Int) -> Unit = {},
 ) {
     val context = LocalContext.current
-    var selectedTabIdx by remember { mutableIntStateOf(0) }
+    var selectedTabIdx by remember(state.frontendSelectedTabIdx) { mutableIntStateOf(state.frontendSelectedTabIdx) }
     val tabs = remember(state.aioStoreEnabled) {
         if (state.aioStoreEnabled) {
             listOf(FrontendTab.LIBRARY, FrontendTab.STORE, FrontendTab.DOWNLOADS)
@@ -590,9 +590,9 @@ internal fun LibraryFrontendPane(
     val searchFocusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
 
-    // Notify parent when switching to/from Downloads tab
+    // Notify parent when switching tabs
     LaunchedEffect(selectedTabIdx) {
-        onFrontendTabChanged(tabs[selectedTabIdx] == FrontendTab.DOWNLOADS)
+        onTabChanged(selectedTabIdx)
     }
 
     var connectedControllerType by remember { mutableStateOf(ControllerType.NONE) }

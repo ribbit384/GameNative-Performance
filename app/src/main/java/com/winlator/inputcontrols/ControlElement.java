@@ -369,7 +369,7 @@ public class ControlElement {
         // Base alphas for components (will be multiplied by the layer's alpha)
         int fillAlpha = 50;
         int engagedFillAlpha = 90;
-        int shadowAlpha = 100;
+        int shadowAlpha = 140; // Increased for better visibility
         int outerStrokeAlpha = 150;
 
         int fillColor = ColorUtils.setAlphaComponent(primaryColor, fillAlpha);
@@ -377,8 +377,8 @@ public class ControlElement {
         int shadowColor = Color.argb(shadowAlpha, 0, 0, 0);
         int outerStrokeColor = Color.argb(outerStrokeAlpha, 0, 0, 0);
 
-        float shadowOffset = snappingSize * 0.1f;
-        float strokeWidth = snappingSize * 0.2f;
+        float shadowOffset = snappingSize * 0.12f; // Slightly more offset
+        float strokeWidth = snappingSize * 0.22f; // Slightly thicker stroke
 
         paint.setColor(selected ? inputControlsView.getSecondaryColor() : primaryColor);
         paint.setStyle(Paint.Style.STROKE);
@@ -392,7 +392,7 @@ public class ControlElement {
                 float cx = boundingBox.centerX();
                 float cy = boundingBox.centerY();
 
-                // 1. Draw Shadow first (Offset slightly, no expansion to match D-pad)
+                // 1. Draw Shadow first
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setColor(shadowColor);
                 paint.setStrokeWidth(strokeWidth);
@@ -467,11 +467,12 @@ public class ControlElement {
                 path.lineTo(cx + dOffsetY, cy + dOffsetX);
                 path.close();
 
-                // Draw Shadow (Offset matching buttons)
+                // Draw Shadow
                 canvas.save();
                 canvas.translate(shadowOffset, shadowOffset);
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setColor(shadowColor);
+                paint.setStrokeWidth(strokeWidth);
                 canvas.drawPath(path, paint);
                 canvas.restore();
 
@@ -500,6 +501,7 @@ public class ControlElement {
                 // Shadow
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setColor(shadowColor);
+                paint.setStrokeWidth(strokeWidth);
                 canvas.drawRoundRect(boundingBox.left + shadowOffset, boundingBox.top + shadowOffset, boundingBox.right + shadowOffset, boundingBox.bottom + shadowOffset, radius, radius, paint);
 
                 // Background fill
@@ -588,7 +590,7 @@ public class ControlElement {
                 float cx = boundingBox.centerX();
                 float cy = boundingBox.centerY();
 
-                // 1. Outer ring shadow (Matching button shadowOffset)
+                // 1. Outer ring shadow
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setColor(shadowColor);
                 paint.setStrokeWidth(strokeWidth);
@@ -616,7 +618,7 @@ public class ControlElement {
                 float thumbstickY = getCurrentPosition().y;
                 float thumbRadius = snappingSize * 3.5f * scale;
 
-                // Knob Shadow (Consistency check: offset + color)
+                // Knob Shadow
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setColor(shadowColor);
                 paint.setStrokeWidth(strokeWidth);
@@ -642,6 +644,7 @@ public class ControlElement {
                 // Shadow
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setColor(shadowColor);
+                paint.setStrokeWidth(strokeWidth);
                 canvas.drawRoundRect(boundingBox.left + shadowOffset, boundingBox.top + shadowOffset, boundingBox.right + shadowOffset, boundingBox.bottom + shadowOffset, radius, radius, paint);
 
                 // Background fill

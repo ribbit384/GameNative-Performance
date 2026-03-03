@@ -87,11 +87,25 @@ fun GraphicsTabContent(state: ContainerConfigState) {
                 colors = settingsTileColors(),
                 title = { Text(text = stringResource(R.string.graphics_driver_version)) },
                 value = state.graphicsDriverVersionIndex.value,
-                items = state.getVersionsForDriver(),
-                onItemSelected = {
-                    state.graphicsDriverVersionIndex.value = it
-                    val selectedVersion = if (it == 0) "" else state.getVersionsForDriver()[it]
-                    state.config.value = state.config.value.copy(graphicsDriverVersion = selectedVersion)
+                items = state.graphicsDriverVersionOptions.labels,
+                itemMuted = state.graphicsDriverVersionOptions.muted,
+                onItemSelected = { idx ->
+                    val selectedId = state.graphicsDriverVersionOptions.ids[idx]
+                    val isMuted = state.graphicsDriverVersionOptions.muted[idx]
+                    
+                    if (isMuted) {
+                        val entry = state.graphicsDriverManifestById[selectedId]
+                        if (entry != null) {
+                            state.launchManifestDriverInstall(entry) {
+                                state.graphicsDriverVersionIndex.value = idx
+                                state.config.value = state.config.value.copy(graphicsDriverVersion = selectedId)
+                            }
+                        }
+                    } else {
+                        state.graphicsDriverVersionIndex.value = idx
+                        val selectedVersion = if (idx == 0) "" else selectedId
+                        state.config.value = state.config.value.copy(graphicsDriverVersion = selectedVersion)
+                    }
                 },
             )
         }
@@ -303,14 +317,10 @@ private fun DxWrapperSection(state: ContainerConfigState) {
 
     // DXVK Dropdown
     run {
-        val context = state.currentDxvkContext()
-        val rawLabels = context.labels
-        val rawIds = context.ids
-        val rawMuted = context.muted
-
-        val items = listOf("Disabled") + rawLabels
-        val itemIds = listOf("Disabled") + rawIds
-        val itemMuted = if (rawMuted != null) listOf(false) + rawMuted else null
+        val dxvkCtx = state.currentDxvkContext()
+        val items = dxvkCtx.labels
+        val itemIds = dxvkCtx.ids
+        val itemMuted = dxvkCtx.muted
 
         val selectedIndex = itemIds.indexOf(effectiveDxvk).let {
             if (it >= 0) it else itemIds.indexOfFirst { id -> id != "Disabled" && effectiveDxvk.startsWith(id) }.coerceAtLeast(0)
@@ -332,11 +342,10 @@ private fun DxWrapperSection(state: ContainerConfigState) {
                     return@SettingsListDropdown
                 }
 
-                val originalIdx = idx - 1
-                val isManifestNotInstalled = state.isBionicVariant && rawMuted?.getOrNull(originalIdx) == true
-                val manifestEntry = if (state.isBionicVariant && originalIdx >= 0) state.dxvkManifestById[rawIds.getOrNull(originalIdx)] else null
+                val isMuted = itemMuted.getOrNull(idx) == true
+                val manifestEntry = state.dxvkManifestById[selectedId]
                 
-                if (isManifestNotInstalled && manifestEntry != null) {
+                if (isMuted && manifestEntry != null) {
                     state.launchManifestContentInstall(
                         manifestEntry,
                         ContentProfile.ContentType.CONTENT_TYPE_DXVK,
@@ -350,33 +359,29 @@ private fun DxWrapperSection(state: ContainerConfigState) {
                 val kvs = KeyValueSet(state.config.value.dxwrapperConfig)
                 kvs.put("version", selectedId)
                 state.config.value = state.config.value.copy(dxvkVersion = selectedId, dxwrapperConfig = kvs.toString())
-                state.dxvkVersionIndex.value = originalIdx.coerceAtLeast(0)
+                state.dxvkVersionIndex.value = idx
             },
         )
     }
 
     // VKD3D Dropdown
     run {
-        val rawLabels = if (state.isBionicVariant) state.vkd3dOptions.labels else state.vkd3dVersionsBase
-        val rawIds = if (state.isBionicVariant) state.vkd3dOptions.ids else state.vkd3dVersionsBase
-        val rawMuted = if (state.isBionicVariant) state.vkd3dOptions.muted else null
+        val vkd3dItems = listOf("Disabled") + state.vkd3dOptions.labels
+        val vkd3dIds = listOf("Disabled") + state.vkd3dOptions.ids
+        val vkd3dMuted = listOf(false) + state.vkd3dOptions.muted
 
-        val items = listOf("Disabled") + rawLabels
-        val itemIds = listOf("Disabled") + rawIds
-        val itemMuted = if (rawMuted != null) listOf(false) + rawMuted else null
-
-        val selectedIndex = itemIds.indexOf(effectiveVkd3d).let {
-            if (it >= 0) it else itemIds.indexOfFirst { id -> id != "Disabled" && effectiveVkd3d.startsWith(id) }.coerceAtLeast(0)
+        val selectedIndex = vkd3dIds.indexOf(effectiveVkd3d).let {
+            if (it >= 0) it else vkd3dIds.indexOfFirst { id -> id != "Disabled" && effectiveVkd3d.startsWith(id) }.coerceAtLeast(0)
         }
 
         SettingsListDropdown(
             colors = settingsTileColors(),
             title = { Text(text = "VKD3D Version") },
             value = selectedIndex,
-            items = items,
-            itemMuted = itemMuted,
+            items = vkd3dItems,
+            itemMuted = vkd3dMuted,
             onItemSelected = { idx ->
-                val selectedId = itemIds.getOrNull(idx) ?: "Disabled"
+                val selectedId = vkd3dIds.getOrNull(idx) ?: "Disabled"
                 if (selectedId == "Disabled") {
                     val kvs = KeyValueSet(state.config.value.dxwrapperConfig)
                     kvs.put("vkd3dVersion", "Disabled")
@@ -385,11 +390,10 @@ private fun DxWrapperSection(state: ContainerConfigState) {
                     return@SettingsListDropdown
                 }
 
-                val originalIdx = idx - 1
-                val isManifestNotInstalled = state.isBionicVariant && rawMuted?.getOrNull(originalIdx) == true
-                val manifestEntry = if (state.isBionicVariant && originalIdx >= 0) state.vkd3dManifestById[rawIds.getOrNull(originalIdx)] else null
+                val isMuted = vkd3dMuted.getOrNull(idx) == true
+                val manifestEntry = state.vkd3dManifestById[selectedId]
 
-                if (isManifestNotInstalled && manifestEntry != null) {
+                if (isMuted && manifestEntry != null) {
                     state.launchManifestContentInstall(
                         manifestEntry,
                         ContentProfile.ContentType.CONTENT_TYPE_VKD3D,

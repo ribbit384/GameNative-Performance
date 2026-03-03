@@ -1,6 +1,5 @@
 package com.winlator.xserver;
 
-import android.util.Log;
 import android.util.SparseArray;
 
 import com.winlator.core.CursorLocker;
@@ -35,19 +34,18 @@ public class XServer {
     public final Pointer pointer = new Pointer(this);
     public final InputDeviceManager inputDeviceManager;
     public final GrabManager grabManager;
-    private boolean isGrabbed = false;
-    private XClient grabbingClient = null;
     public final CursorLocker cursorLocker;
     private SHMSegmentManager shmSegmentManager;
     private GLRenderer renderer;
-    private WinHandler winHandler;
+    public WinHandler winHandler;
+    private String surfaceFormat = "BGRA8";
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
     private boolean relativeMouseMovement = false;
     private boolean simulateTouchScreen = false;
-    private String surfaceFormat = "BGRA8";
+    private boolean isGrabbed = false;
+    private XClient grabbingClient = null;
 
     public XServer(ScreenInfo screenInfo) {
-        Log.d("XServer", "Creating xServer " + screenInfo);
         this.screenInfo = screenInfo;
         cursorLocker = new CursorLocker(this);
         for (Lockable lockable : Lockable.values()) locks.put(lockable, new ReentrantLock());
@@ -79,6 +77,14 @@ public class XServer {
         this.simulateTouchScreen = simulateTouchScreen;
     }
 
+    public String getSurfaceFormat() {
+        return surfaceFormat;
+    }
+
+    public void setSurfaceFormat(String surfaceFormat) {
+        this.surfaceFormat = surfaceFormat;
+    }
+
     public GLRenderer getRenderer() {
         return renderer;
     }
@@ -101,14 +107,6 @@ public class XServer {
 
     public void setSHMSegmentManager(SHMSegmentManager shmSegmentManager) {
         this.shmSegmentManager = shmSegmentManager;
-    }
-
-    public String getSurfaceFormat() {
-        return surfaceFormat;
-    }
-
-    public void setSurfaceFormat(String surfaceFormat) {
-        this.surfaceFormat = surfaceFormat;
     }
 
     private class SingleXLock implements XLock {
@@ -191,13 +189,13 @@ public class XServer {
 
     public void injectKeyPress(XKeycode xKeycode, int keysym) {
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
-            keyboard.setKeyPress(xKeycode.getId(), keysym);
+            keyboard.setKeyPress(xKeycode.id, keysym);
         }
     }
 
     public void injectKeyRelease(XKeycode xKeycode) {
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
-            keyboard.setKeyRelease(xKeycode.getId());
+            keyboard.setKeyRelease(xKeycode.id);
         }
     }
 
@@ -219,10 +217,6 @@ public class XServer {
     }
 
     public synchronized boolean isGrabbedBy(XClient client) {
-        if (this.isGrabbed) {
-            return this.grabbingClient == client;
-        }
-        return false;
+        return isGrabbed && grabbingClient == client;
     }
-
 }

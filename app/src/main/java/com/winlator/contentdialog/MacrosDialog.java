@@ -2,6 +2,7 @@ package com.winlator.contentdialog;
 
 import android.app.Activity;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,24 +33,13 @@ public final class MacrosDialog {
         dialog.setTitle(R.string.input_macros);
         dialog.setIcon(R.drawable.icon_gamepad);
 
-        boolean dark = PreferenceManager.getDefaultSharedPreferences(activity)
-                .getBoolean("dark_mode", false);
-
         RecyclerView rv = dialog.findViewById(R.id.RVMacros);
         rv.setLayoutManager(new LinearLayoutManager(activity));
 
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(activity);
         List<Item> items = buildItems(slotIndex, prefs);
-        Adapter adapter = new Adapter(items, prefs, dark);   // ← pass dark
+        Adapter adapter = new Adapter(items, prefs, true);
         rv.setAdapter(adapter);
-
-        // force the hint / switch text color:
-        if (dark) {
-            TextView hint = dialog.findViewById(R.id.TVHint);
-            if (hint != null) hint.setTextColor(0xFFFFFFFF);
-            View sw = dialog.findViewById(R.id.SWIncludeTriggers);
-            if (sw instanceof TextView) ((TextView) sw).setTextColor(0xFFFFFFFF);
-        }
 
         // Orientation & metrics
         final boolean isLand =
@@ -69,35 +59,24 @@ public final class MacrosDialog {
         Button btCancel        = dialog.findViewById(R.id.BTCancel);
         Button btOk            = dialog.findViewById(R.id.BTConfirm);
 
-        // Recycler
-        rv = dialog.findViewById(R.id.RVMacros);
+        // Recycler setup
         rv.setNestedScrollingEnabled(false);
-        rv.setLayoutManager(new LinearLayoutManager(activity));
-
-        // Data / adapter
-        prefs = PreferenceManager.getDefaultSharedPreferences(activity);
-        items = buildItems(slotIndex, prefs);
-        adapter = new Adapter(items, prefs, dark);
-        rv.setAdapter(adapter);
 
         // Include-triggers switch
         CompoundButton cb = dialog.findViewById(R.id.SWIncludeTriggers);
         String includeKey = prefKey(slotIndex, "IncludeTriggers");
         cb.setChecked(prefs.getBoolean(includeKey, false));
-        SharedPreferences finalPrefs = prefs;
         cb.setOnCheckedChangeListener((buttonView, isChecked) ->
-                finalPrefs.edit().putBoolean(includeKey, isChecked).apply());
+                prefs.edit().putBoolean(includeKey, isChecked).apply());
 
         // Enable/Disable handlers (shared)
-        List<Item> finalItems = items;
-        Adapter finalAdapter = adapter;
         View.OnClickListener enableAll = v -> {
-            for (Item it : finalItems) { it.enabled = true; finalPrefs.edit().putBoolean(it.prefKey, true).apply(); }
-            finalAdapter.notifyDataSetChanged();
+            for (Item it : items) { it.enabled = true; prefs.edit().putBoolean(it.prefKey, true).apply(); }
+            adapter.notifyDataSetChanged();
         };
         View.OnClickListener disableAll = v -> {
-            for (Item it : finalItems) { it.enabled = false; finalPrefs.edit().putBoolean(it.prefKey, false).apply(); }
-            finalAdapter.notifyDataSetChanged();
+            for (Item it : items) { it.enabled = false; prefs.edit().putBoolean(it.prefKey, false).apply(); }
+            adapter.notifyDataSetChanged();
         };
 
         // Wire local buttons
@@ -114,10 +93,12 @@ public final class MacrosDialog {
             }
         });
 
-
-
         // --- Show before sizing -----------------------------------------------
         dialog.show();
+
+        // Apply white text to the whole content
+        View macrosRoot = dialog.getContentView();
+        if (macrosRoot != null && macrosRoot instanceof ViewGroup) setTextColorForDialog((ViewGroup) macrosRoot, 0xFFFFFFFF);
 
         // --- Window width cap ---------------------------------------------------
         int winCapDp  = isLand ? 680 : 560;
@@ -127,11 +108,7 @@ public final class MacrosDialog {
         android.view.Window w = dialog.getWindow();
         if (w != null) {
             w.setLayout(winTarget, android.view.WindowManager.LayoutParams.WRAP_CONTENT);
-        }
-
-        // ---- Center the window and the inflated content ----
-        if (w != null) {
-            w.setGravity(android.view.Gravity.CENTER);   // center the dialog window itself
+            w.setGravity(android.view.Gravity.CENTER);
         }
 
         // The container in content_dialog.xml that hosts macros_dialog_list
@@ -164,7 +141,7 @@ public final class MacrosDialog {
         }
 
         // --- Column width (where list lives) ------------------------------------
-        int colCapDp  = isLand ? 560 : 300;        // tune: you said ~400–480 vs ~260–300
+        int colCapDp  = isLand ? 560 : 300;
         int colCapPx  = Math.round(colCapDp * dm.density);
         int colTarget = Math.min((int) (screenW * 0.90f), colCapPx);
 
@@ -175,29 +152,9 @@ public final class MacrosDialog {
             column.setLayoutParams(lp);
         }
 
-        // Center inside the ContentDialog frame
-        frame = dialog.findViewById(R.id.FrameLayout);
-        if (frame instanceof android.widget.LinearLayout) {
-            android.widget.LinearLayout.LayoutParams flp =
-                    (android.widget.LinearLayout.LayoutParams) frame.getLayoutParams();
-            flp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-            flp.gravity = android.view.Gravity.CENTER_HORIZONTAL;
-            frame.setLayoutParams(flp);
-        }
-        root = dialog.findViewById(R.id.MacrosRoot);
-        if (root instanceof android.widget.FrameLayout) {
-            android.widget.FrameLayout.LayoutParams rlp =
-                    (android.widget.FrameLayout.LayoutParams) root.getLayoutParams();
-            rlp.gravity = android.view.Gravity.CENTER_HORIZONTAL;
-            root.setLayoutParams(rlp);
-        }
-
         // --- Hybrid visibility & text sizes ------------------------------------
-        // Local buttons shown in portrait, hidden in landscape.
         if (btEnableAllLocal != null)  btEnableAllLocal .setVisibility(isLand ? View.GONE  : View.VISIBLE);
         if (btDisableAllLocal != null) btDisableAllLocal.setVisibility(isLand ? View.GONE  : View.VISIBLE);
-
-        // Bottom‑bar buttons shown in landscape, hidden in portrait.
         if (btEnableAllBar  != null) btEnableAllBar .setVisibility(isLand ? View.VISIBLE : View.GONE);
         if (btDisableAllBar != null) btDisableAllBar.setVisibility(isLand ? View.VISIBLE : View.GONE);
 
@@ -232,9 +189,9 @@ public final class MacrosDialog {
         // Right‑align bottom‑bar row
         View llBar = dialog.findViewById(R.id.LLBottomBar);
         if (llBar instanceof ViewGroup) {
-            ViewGroup row = (ViewGroup) ((ViewGroup) llBar).getChildAt(1); // second child is the row
-            if (row instanceof android.widget.LinearLayout) {
-                ((android.widget.LinearLayout) row)
+            View rowCandidate = ((ViewGroup) llBar).getChildAt(1);
+            if (rowCandidate instanceof android.widget.LinearLayout) {
+                ((android.widget.LinearLayout) rowCandidate)
                         .setGravity(android.view.Gravity.END | android.view.Gravity.CENTER_VERTICAL);
             }
         }
@@ -294,11 +251,11 @@ public final class MacrosDialog {
     private static final class Adapter extends RecyclerView.Adapter<VH> {
         private final List<Item> data;
         private final SharedPreferences prefs;
-        private final boolean dark;
+        private final boolean forceWhite;
         private final android.content.res.ColorStateList whiteState;
 
-        Adapter(List<Item> data, SharedPreferences prefs, boolean dark) {
-            this.data = data; this.prefs = prefs; this.dark = dark;
+        Adapter(List<Item> data, SharedPreferences prefs, boolean forceWhite) {
+            this.data = data; this.prefs = prefs; this.forceWhite = forceWhite;
             int[][] states = new int[][]{
                     new int[]{android.R.attr.state_checked},
                     new int[]{}};
@@ -317,9 +274,8 @@ public final class MacrosDialog {
             h.label.setText(h.itemView.getContext().getString(it.labelRes));
             h.toggle.setChecked(it.enabled);
 
-            if (dark) {
+            if (forceWhite) {
                 h.label.setTextColor(0xFFFFFFFF);
-                // ToggleButton often uses a ColorStateList; force both states to white:
                 h.toggle.setTextColor(whiteState);
             }
 

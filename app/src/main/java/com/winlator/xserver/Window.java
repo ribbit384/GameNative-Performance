@@ -1,5 +1,6 @@
 package com.winlator.xserver;
 
+import android.util.Log;
 import android.util.SparseArray;
 
 import com.winlator.xserver.events.Event;
@@ -177,11 +178,15 @@ public class Window extends XResource {
 
     public boolean isApplicationWindow() {
         int windowGroup = getWMHintsValue(WMHints.WINDOW_GROUP);
-        return isRenderable() && windowGroup == this.id;
+        return attributes.isMapped() && windowGroup == id && width > 1 && height > 1;
     }
 
     public boolean isInputOutput() {
         return content != null;
+    }
+
+    public boolean isRenderable() {
+        return isInputOutput() && attributes.isMapped() && width > 0 && height > 0;
     }
 
     public void addChild(Window child) {
@@ -413,9 +418,5 @@ public class Window extends XResource {
             result += property.nameAsString()+"="+property+"\n";
         }
         return result;
-    }
-
-    public boolean isRenderable() {
-        return this.attributes.isMapped() && this.width > 1 && this.height > 1;
     }
 }

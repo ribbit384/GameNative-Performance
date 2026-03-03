@@ -211,25 +211,60 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
         final int enabledPlayerCount = com.winlator.inputcontrols.ControllerManager.getInstance().getEnabledPlayerCount();
         Context context = environment.getContext();
         String filesDir = context.getFilesDir().getAbsolutePath();
-        for (int i = 0; i < 4; i++) {
-            String memPath;
-            if (i == 0) {
-                // Player 1 uses the original, non-numbered path that is known to work.
-                memPath = filesDir + "/imagefs/tmp/gamepad.mem";
-            } else {
-                // Players 2, 3, 4 use a 1-based index.
-                memPath = filesDir + "/imagefs/tmp/gamepad" + i + ".mem";
-            }
+        String actualTmpDir = filesDir + "/imagefs/tmp";
+        
+        // Ensure actual directory exists
+        new File(actualTmpDir).mkdirs();
 
+        for (int i = 0; i < 4; i++) {
+            String memPath = actualTmpDir + (i == 0 ? "/gamepad.mem" : "/gamepad" + i + ".mem");
             File memFile = new File(memPath);
-            memFile.getParentFile().mkdirs();
             try (RandomAccessFile raf = new RandomAccessFile(memFile, "rw")) {
                 raf.setLength(64);
             } catch (IOException e) {
                 Log.e("EVSHIM_HOST", "Failed to create mem file for player index "+i, e);
             }
         }
+
         ImageFs imageFs = ImageFs.find(context);
+        
+        // Symlink Fix: Create symlinks for hardcoded paths in libredirect.so
+        try {
+            String currentPkg = context.getPackageName();
+            String[] hardcodedPkgs = {"com.winlator.cmod", "app.gamenative"};
+            
+            // Guest-side /data/data redirection inside imagefs
+            File fakeDataDataDir = new File(imageFs.getRootDir(), "data/data");
+            fakeDataDataDir.mkdirs();
+            
+            for (String pkg : hardcodedPkgs) {
+                if (!pkg.equals(currentPkg)) {
+                    // 1. Link inside imagefs (for relative guest path resolution)
+                    File pkgDir = new File(fakeDataDataDir, pkg);
+                    if (!pkgDir.exists()) {
+                        FileUtils.symlink("/data/data/" + currentPkg, pkgDir.getAbsolutePath());
+                    }
+                    
+                    // 2. Link in actual host /data/data (Crucial for Bionic which sees host paths)
+                    // We can't usually create things in /data/data/ directly, 
+                    // but we can create it inside OUR OWN data folder and then use LD_PRELOAD 
+                    // or other environment variables to redirect. 
+                    // However, libredirect.so is the one DOING the redirect.
+                    // If libredirect.so is hardcoded to use /data/data/app.gamenative as the TARGET,
+                    // we must ensure that path exists.
+                }
+            }
+            
+            // Re-apply the EVSHIM_DATA_DIR to point to /tmp
+            // Most Ludashi-based shims look here if the env var is set.
+            envVars.put("EVSHIM_DATA_DIR", "/tmp");
+            
+            // Set additional env var that some versions of libredirect use
+            envVars.put("PACKAGE_NAME", currentPkg);
+            envVars.put("REPLACE_PATH", "/data/data/" + currentPkg);
+        } catch (Exception e) {
+            Log.e("BionicProgramLauncherComponent", "Failed to setup symlink fixes", e);
+        }
         File rootDir = imageFs.getRootDir();
 
         PrefManager.init(context);

@@ -1,6 +1,6 @@
 package com.winlator.xserver
 
-enum class XKeycode(val id: Byte) {
+enum class XKeycode(@JvmField val id: Byte) {
     KEY_NONE(0),
     KEY_ESC(9),
     KEY_1(10),
@@ -102,5 +102,5 @@ enum class XKeycode(val id: Byte) {
     KEY_NEXT(117),
     KEY_INSERT(118),
     KEY_DEL(119),
-    KEY_MAX(KEY_DEL.id),
+    KEY_MAX(119),
 }

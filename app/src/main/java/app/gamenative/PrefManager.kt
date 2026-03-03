@@ -956,4 +956,12 @@ object PrefManager {
     var aioStoreEnabled: Boolean
         get() = getPref(AIO_STORE_ENABLED, true)
         set(value) = setPref(AIO_STORE_ENABLED, value)
+
+    // Touch controller joysticks visibility
+    private val SHOW_JOYSTICKS = booleanPreferencesKey("show_joysticks")
+    
+    @JvmStatic
+    var showJoysticks: Boolean
+        get() = getPref(SHOW_JOYSTICKS, true)
+        set(value) = setPref(SHOW_JOYSTICKS, value)
 }

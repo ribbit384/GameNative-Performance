@@ -14,7 +14,7 @@
 enum GCFunction {GCF_CLEAR, GCF_AND, GCF_AND_REVERSE, GCF_COPY, GCF_AND_INVERTED, GCF_NO_OP, GCF_XOR, GCF_OR, GCF_NOR, GCF_EQUIV, GCF_INVERT, GCF_OR_REVERSE, GCF_COPY_INVERTED, GCF_OR_INVERTED, GCF_NAND, GCF_SET};
 
 static int packColor(int8_t r, int8_t g, int8_t b) {
-    return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
+    return ((r & 0xff00) << 8) | (g & 0xff00) | (b >> 8);
 }
 
 static void unpackColor(int color, uint8_t *rgba) {
@@ -36,37 +36,37 @@ static int getBitmapBytePad(int width) {
 
 static int setPixelOp(int srcColor, int dstColor, enum GCFunction gcFunction) {
     switch (gcFunction) {
-        case GCF_CLEAR :
+        case GCF_CLEAR:
             return BLACK;
-        case GCF_AND :
+        case GCF_AND:
             return srcColor & dstColor;
-        case GCF_AND_REVERSE :
+        case GCF_AND_REVERSE:
             return srcColor & ~dstColor;
-        case GCF_COPY :
+        case GCF_COPY:
             return srcColor;
-        case GCF_AND_INVERTED :
+        case GCF_AND_INVERTED:
             return ~srcColor & dstColor;
-        case GCF_XOR :
+        case GCF_XOR:
             return srcColor ^ dstColor;
-        case GCF_OR :
+        case GCF_OR:
             return srcColor | dstColor;
-        case GCF_NOR :
+        case GCF_NOR:
             return ~srcColor & ~dstColor;
-        case GCF_EQUIV :
+        case GCF_EQUIV:
             return ~srcColor ^ dstColor;
-        case GCF_INVERT :
+        case GCF_INVERT:
             return ~dstColor;
-        case GCF_OR_REVERSE :
+        case GCF_OR_REVERSE:
             return srcColor | ~dstColor;
-        case GCF_COPY_INVERTED :
+        case GCF_COPY_INVERTED:
             return ~srcColor;
-        case GCF_OR_INVERTED :
+        case GCF_OR_INVERTED:
             return ~srcColor | dstColor;
-        case GCF_NAND :
+        case GCF_NAND:
             return ~srcColor | ~dstColor;
-        case GCF_SET :
+        case GCF_SET:
             return WHITE;
-        case GCF_NO_OP :
+        case GCF_NO_OP:
         default:
             return dstColor;
     }
@@ -86,7 +86,9 @@ Java_com_winlator_xserver_Drawable_drawBitmap(JNIEnv *env, jclass obj,
 
     int stride = getBitmapBytePad(width);
     for (int16_t y = 0, x; y < height; y++) {
-        for (x = 0; x < width; x++) *dstDataAddr++ = getBit(srcDataAddr, x) ? WHITE : BLACK;
+        for (x = 0; x < width; x++) {
+            *dstDataAddr++ = getBit(srcDataAddr, x) ? WHITE : BLACK;
+        }
         srcDataAddr += stride;
     }
 }
@@ -105,21 +107,17 @@ Java_com_winlator_xserver_Drawable_copyArea(JNIEnv *env, jclass obj, jshort srcX
         return;
     }
 
-    /* Fast path when the image is tightly packed (width == stride on both buffers) */
-    if (width == srcStride && width == dstStride) {
-        size_t bytes = (size_t)height * dstStride * 4;
-        memcpy(dstDataAddr + (dstX + dstY * dstStride) * 4,
-        srcDataAddr + (srcX + srcY * srcStride) * 4,
-        bytes);
-        return;
-    }
+    jlong srcLength = (*env)->GetDirectBufferCapacity(env, srcData);
+    jlong dstLength = (*env)->GetDirectBufferCapacity(env, dstData);
 
-    /* General case: row-by-row copy */
-    size_t rowBytes = (size_t)width * 4;
-    for (int16_t y = 0; y < height; y++) {
-        memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4,
-        srcDataAddr + (srcX + (y + srcY) * srcStride) * 4,
-        rowBytes);
+    if (srcX != 0 || srcY != 0 || dstX != 0 || dstY != 0 || srcLength != dstLength) {
+        int copyAmount = width * 4;
+        for (int16_t y = 0; y < height; y++) {
+            memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4,
+                   srcDataAddr + (srcX + (y + srcY) * srcStride) * 4, copyAmount);
+        }
+    } else {
+        memcpy(dstDataAddr, srcDataAddr, dstLength);
     }
 }
 
@@ -141,12 +139,12 @@ Java_com_winlator_xserver_Drawable_copyAreaOp(JNIEnv *env, jclass obj, jshort sr
         for (int16_t x = 0; x < width; x++) {
             int i = (x + srcX + (y + srcY) * srcStride) * 4;
             int j = (x + dstX + (y + dstY) * dstStride) * 4;
-            int srcColor = (srcDataAddr[i+0] << 16) | (srcDataAddr[i+1] << 8) | srcDataAddr[i+2];
-            int dstColor = (dstDataAddr[j+0] << 16) | (dstDataAddr[j+1] << 8) | dstDataAddr[j+2];
+            int srcColor = (srcDataAddr[i] << 16) | (srcDataAddr[i+1] << 8) | srcDataAddr[i+2];
+            int dstColor = (dstDataAddr[j] << 16) | (dstDataAddr[j+1] << 8) | dstDataAddr[j+2];
 
             dstColor = setPixelOp(srcColor, dstColor, gcFunction);
 
-            dstDataAddr[j+0] = (dstColor >> 16) & 0xff;
+            dstDataAddr[j] = (dstColor >> 16) & 0xff;
             dstDataAddr[j+1] = (dstColor >> 8) & 0xff;
             dstDataAddr[j+2] = dstColor & 0xff;
         }
@@ -174,7 +172,9 @@ Java_com_winlator_xserver_Drawable_fillRect(JNIEnv *env, jclass obj, jshort x, j
         return;
     }
 
-    for (int i = 0; i < rowSize; i += 4) memcpy(row + i, rgba, 4);
+    for (int i = 0; i < rowSize; i += 4) {
+        memcpy(row + i, rgba, 4);
+    }
     for (int16_t i = 0; i < height; i++) {
         memcpy(dataAddr + (x + (i + y) * stride) * 4, row, rowSize);
     }
@@ -193,8 +193,8 @@ Java_com_winlator_xserver_Drawable_drawLine(JNIEnv *env, jclass obj, jshort x0, 
         return;
     }
 
-    int dx =  abs(x1-x0);
-    int dy = -abs(y1-y0);
+    int dx =  abs(x1 - x0);
+    int dy = -abs(y1 - y0);
     int8_t sx = x0 < x1 ? 1 : -1;
     int8_t sy = y0 < y1 ? 1 : -1;
     int e1 = dx + dy, e2;
@@ -258,12 +258,12 @@ Java_com_winlator_xserver_Drawable_drawAlphaMaskedBitmap(JNIEnv *env, jclass obj
     }
 }
 
-/* replace the whole JNI body */
 JNIEXPORT void JNICALL
-Java_com_winlator_xserver_Drawable_fromBitmap(JNIEnv *env, jclass obj,
-        jobject bitmap, jobject data) {
-    uint8_t *dst = (*env)->GetDirectBufferAddress(env, data);
-    if (!dst) {
+Java_com_winlator_xserver_Drawable_fromBitmap(JNIEnv *env, jclass obj, jobject bitmap,
+                                              jobject data) {
+    char *dataAddr = (*env)->GetDirectBufferAddress(env, data);
+
+    if (!dataAddr) {
         printf("Error: NULL buffer address in fromBitmap\n");
         return;
     }
@@ -271,10 +271,18 @@ Java_com_winlator_xserver_Drawable_fromBitmap(JNIEnv *env, jclass obj,
     AndroidBitmapInfo info;
     uint8_t *pixels;
 
-    if (AndroidBitmap_getInfo(env, bitmap, &info) < 0) return;
-    if (AndroidBitmap_lockPixels(env, bitmap, (void **)&pixels) < 0) return;
+    if (AndroidBitmap_getInfo(env, bitmap, &info) < 0) {
+        printf("Error: Failed to get bitmap info in fromBitmap\n");
+        return;
+    }
+    if (AndroidBitmap_lockPixels(env, bitmap, (void**)&pixels) < 0) {
+        printf("Error: Failed to lock bitmap pixels in fromBitmap\n");
+        return;
+    }
 
-    memcpy(dst, pixels, (size_t)info.width * info.height * 4);
+    for (int i = 0, size = info.width * info.height * 4; i < size; i++) {
+        memcpy(dataAddr + i, pixels + i, 4);
+    }
 
     AndroidBitmap_unlockPixels(env, bitmap);
 }

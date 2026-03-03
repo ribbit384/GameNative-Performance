@@ -871,6 +871,10 @@ class LibraryViewModel @Inject constructor(
         _state.update { it.copy(aioStoreEnabled = newValue) }
     }
 
+    fun onFrontendTabChanged(index: Int) {
+        _state.update { it.copy(frontendSelectedTabIdx = index) }
+    }
+
     fun resumeDownload(appId: String) {
         // Clear any error state before resuming
         val allDownloads = DownloadService.getAllDownloads()

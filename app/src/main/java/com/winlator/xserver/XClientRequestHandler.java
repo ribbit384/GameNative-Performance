@@ -190,11 +190,10 @@ public class XClientRequestHandler implements RequestHandler {
                         WindowRequests.destroyWindow(client, inputStream, outputStream);
                     }
                     break;
-                case ClientOpcodes.DESTROY_SUB_WINDOW:
-                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.DRAWABLE_MANAGER, XServer.Lockable.INPUT_DEVICE)){
+                case ClientOpcodes.DESTROY_SUB_WINDOWS:
+                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.DRAWABLE_MANAGER, XServer.Lockable.INPUT_DEVICE)) {
                         WindowRequests.destroySubWindows(client, inputStream, outputStream);
                     }
-                    break;
                 case ClientOpcodes.REPARENT_WINDOW:
                     try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
                         WindowRequests.reparentWindow(client, inputStream, outputStream);
@@ -205,8 +204,8 @@ public class XClientRequestHandler implements RequestHandler {
                         WindowRequests.mapWindow(client, inputStream, outputStream);
                     }
                     break;
-                case ClientOpcodes.MAP_SUB_WINDOW:
-                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.INPUT_DEVICE)){
+                case ClientOpcodes.MAP_SUB_WINDOWS:
+                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.INPUT_DEVICE)) {
                         WindowRequests.mapSubWindows(client, inputStream, outputStream);
                     }
                     break;
@@ -233,8 +232,11 @@ public class XClientRequestHandler implements RequestHandler {
                 case ClientOpcodes.INTERN_ATOM:
                     AtomRequests.internAtom(client, inputStream, outputStream);
                     break;
+                /* This seems to also link to UnmapWindow */
                 case ClientOpcodes.GET_ATOM_NAME:
-                    AtomRequests.getAtomName(client, inputStream, outputStream);
+                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.INPUT_DEVICE)) {
+                        AtomRequests.getAtomName(client, inputStream, outputStream);
+                    }
                     break;
                 case ClientOpcodes.CHANGE_PROPERTY:
                     try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
@@ -426,17 +428,18 @@ public class XClientRequestHandler implements RequestHandler {
                     client.skipRequest();
                     break;
                 case ClientOpcodes.GET_POINTER_MAPPING:
-                    CursorRequests.getPointerMapping(client, inputStream, outputStream);
+                    CursorRequests.getPointerMaping(client, inputStream, outputStream);
                     break;
-                case ClientOpcodes.GRAB_SERVER:
-                    try (XLock lock = client.xServer.lockAll()){
+                case 36: // X_GrabServer
+                    try (XLock lock = client.xServer.lockAll()) {
                         client.xServer.setGrabbed(true, client);
                         outputStream.writeSuccessReply(client.getSequenceNumber(), 0);
                         Log.d("XClientRequestHandler", "X_GrabServer request handled successfully:" + outputStream.buffer.position());
                     }
                     break;
-                case ClientOpcodes.UNGRAB_SERVER:
-                    try (XLock lock = client.xServer.lockAll()){
+
+                case 37: // X_UngrabServer
+                    try (XLock lock = client.xServer.lockAll()) {
                         if (client.xServer.isGrabbedBy(client)) {
                             client.xServer.setGrabbed(false, null);
                         }
@@ -455,7 +458,6 @@ public class XClientRequestHandler implements RequestHandler {
         }
         catch (XRequestError e) {
             client.skipRequest();
-            Log.w("XClientRequestHandler", "handleNormalRequest error " + e);
             e.sendError(client, opcode);
         }
 

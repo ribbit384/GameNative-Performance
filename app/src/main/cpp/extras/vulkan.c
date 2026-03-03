@@ -27,7 +27,7 @@ static char *get_native_library_dir(JNIEnv *env, jobject context) {
     char *native_libdir = NULL;
 
     if (context != NULL) {
-        jclass class_ = (*env)->FindClass(env,"com/winlator/core/AppUtils");
+        jclass class_ = (*env)->FindClass(env,"com_winlator/core/AppUtils");
         jmethodID getNativeLibraryDir = (*env)->GetStaticMethodID(env, class_, "getNativeLibDir",
                                                                   "(Landroid/content/Context;)Ljava/lang/String;");
         jstring nativeLibDir = (jstring)(*env)->CallStaticObjectMethod(env, class_,
@@ -72,7 +72,7 @@ static char *get_driver_path(JNIEnv *env, jobject context, const char *driver_na
 static char *get_library_name(JNIEnv *env, jobject context, const char *driver_name) {
     char *library_name = NULL;
 
-    jclass adrenotoolsManager = (*env)->FindClass(env, "com/winlator/contents/AdrenotoolsManager");
+    jclass adrenotoolsManager = (*env)->FindClass(env, "com_winlator/contents/AdrenotoolsManager");
     jmethodID constructor = (*env)->GetMethodID(env, adrenotoolsManager, "<init>", "(Landroid/content/Context;)V");
     jobject  adrenotoolsManagerObj = (*env)->NewObject(env, adrenotoolsManager, constructor, context);
     jmethodID getLibraryName = (*env)->GetMethodID(env, adrenotoolsManager, "getLibraryName","(Ljava/lang/String;)Ljava/lang/String;");

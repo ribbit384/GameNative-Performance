@@ -46,9 +46,9 @@ fun EmulationTabContent(state: ContainerConfigState) {
                                 ) {
                                     state.config.value = config.copy(fexcoreVersion = selectedId)
                                 }
-                                return@SettingsListDropdown
+                            } else {
+                                state.config.value = config.copy(fexcoreVersion = selectedId.ifEmpty { state.fexcoreOptions.labels[idx] })
                             }
-                            state.config.value = config.copy(fexcoreVersion = selectedId.ifEmpty { state.fexcoreOptions.labels[idx] })
                         },
                     )
                 }
@@ -101,8 +101,7 @@ fun EmulationTabContent(state: ContainerConfigState) {
             }
         }
 
-        val box64OptionList = state.getVersionsForBox64()
-        val box64Index = box64OptionList.ids.indexOfFirst { it == config.box64Version }.coerceAtLeast(0)
+        val box64Index = state.box64Options.ids.indexOfFirst { it == config.box64Version }.coerceAtLeast(0)
         val box64ManifestMap = if (config.wineVersion.contains("arm64ec", true)) {
             state.wowBox64ManifestById
         } else {
@@ -112,11 +111,11 @@ fun EmulationTabContent(state: ContainerConfigState) {
             colors = settingsTileColors(),
             title = { Text(text = stringResource(R.string.box64_version)) },
             value = box64Index,
-            items = box64OptionList.labels,
-            itemMuted = box64OptionList.muted,
+            items = state.box64Options.labels,
+            itemMuted = state.box64Options.muted,
             onItemSelected = { idx ->
-                val selectedId = box64OptionList.ids.getOrNull(idx).orEmpty()
-                val isManifestNotInstalled = box64OptionList.muted.getOrNull(idx) == true
+                val selectedId = state.box64Options.ids.getOrNull(idx).orEmpty()
+                val isManifestNotInstalled = state.box64Options.muted.getOrNull(idx) == true
                 val manifestEntry = box64ManifestMap[selectedId.lowercase(Locale.ENGLISH)]
                 if (isManifestNotInstalled && manifestEntry != null) {
                     val expectedType = if (config.wineVersion.contains("arm64ec", true)) {
@@ -127,9 +126,9 @@ fun EmulationTabContent(state: ContainerConfigState) {
                     state.launchManifestContentInstall(manifestEntry, expectedType) {
                         state.config.value = config.copy(box64Version = selectedId)
                     }
-                    return@SettingsListDropdown
+                } else {
+                    state.config.value = config.copy(box64Version = selectedId.ifEmpty { StringUtils.parseIdentifier(state.box64Options.labels[idx]) })
                 }
-                state.config.value = config.copy(box64Version = selectedId.ifEmpty { StringUtils.parseIdentifier(box64OptionList.labels[idx]) })
             },
         )
         SettingsListDropdown(

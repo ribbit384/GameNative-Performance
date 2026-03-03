@@ -329,7 +329,7 @@ fun XServerScreen(
     }
     var isKeyboardVisible = false
     val areControlsVisible = remember { mutableStateOf(PluviaApp.editMode) }
-    val areJoysticksVisible = remember { mutableStateOf(true) }
+    val areJoysticksVisible = remember { mutableStateOf(PrefManager.showJoysticks) }
     var isEditMode by remember { mutableStateOf(PluviaApp.editMode) }
     // Snapshot of element positions before entering edit mode (for cancel behavior)
     var elementPositionsSnapshot by remember { mutableStateOf<Map<com.winlator.inputcontrols.ControlElement, Pair<Int, Int>>>(emptyMap()) }
@@ -452,6 +452,7 @@ fun XServerScreen(
 
                         NavigationDialog.ACTION_SHOW_JOYSTICKS -> {
                             areJoysticksVisible.value = !areJoysticksVisible.value
+                            PrefManager.showJoysticks = areJoysticksVisible.value
                             PluviaApp.inputControlsView?.setJoysticksVisible(areJoysticksVisible.value)
                         }
 
@@ -625,6 +626,22 @@ fun XServerScreen(
 
                         NavigationDialog.ACTION_STRETCH_TO_FULLSCREEN -> {
                             xServerView?.renderer?.toggleFullscreen()
+                        }
+
+                        NavigationDialog.ACTION_SCREEN_EFFECT -> {
+                            com.winlator.contentdialog.ScreenEffectDialog(context, xServerView?.renderer).show()
+                        }
+
+                        NavigationDialog.ACTION_NATIVE_RENDERING -> {
+                            // Toggle fullscreen stretched mode in container settings
+                            container.setFullscreenStretched(!container.isFullscreenStretched())
+                            container.saveData()
+                            
+                            // Update renderer state
+                            xServerView?.renderer?.setViewportNeedsUpdate(true)
+                            
+                            val status = if (container.isFullscreenStretched()) "Enabled" else "Disabled"
+                            com.winlator.core.AppUtils.showToast(context, "Native Rendering: $status")
                         }
 
                         NavigationDialog.ACTION_EXIT_GAME -> {

@@ -1,56 +1,114 @@
 package com.winlator.widget;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.os.SystemClock;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
-import com.winlator.xenvironment.ImageFs;
-
 import app.gamenative.R;
 import timber.log.Timber;
+
+import com.winlator.container.Container;
+import com.winlator.container.Shortcut;
+import com.winlator.core.GPUInformation;
+import com.winlator.core.StringUtils;
+import com.winlator.xenvironment.ImageFs;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class FrameRating extends FrameLayout implements Runnable {
+    private Context context;
     private long lastTime = 0;
     private int frameCount = 0;
     private float lastFPS = 0;
-    private final TextView textView;
+    private String totalRAM = null;
+    private final TextView tvFPS;
+    private final TextView tvRenderer;
+    private final TextView tvGPU;
+    private final TextView tvRAM;
+    private HashMap graphicsDriverConfig;
 
     // FPS reading tracking
-    private static final int READING_INTERVAL_MS = 1000; // Take reading every 1 second
+    private static final int READING_INTERVAL_MS = 1000;
     private int readingCount = 0;
     private long sessionStartTime = 0;
     private int maxFPS = 0;
     private int minFPS = Integer.MAX_VALUE;
     private long lastReadingTime = 0;
-    private long fpsSum = 0; // Sum of all FPS readings for average calculation
+    private long fpsSum = 0;
 
     public FrameRating(Context context) {
-        this(context, null);
+        this(context, (HashMap)null);
     }
 
-    public FrameRating(Context context, AttributeSet attrs) {
-        this(context, attrs, 0);
+    public FrameRating(Context context, HashMap graphicsDriverConfig) {
+        this(context, graphicsDriverConfig ,null);
     }
 
-    public FrameRating(Context context, AttributeSet attrs, int defStyleAttr) {
+    public FrameRating(Context context, HashMap graphicsDriverConfig, AttributeSet attrs) {
+        this(context, graphicsDriverConfig, attrs, 0);
+    }
+
+    public FrameRating(Context context, HashMap graphicsDriverConfig, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-
+        this.context = context;
         View view = LayoutInflater.from(context).inflate(R.layout.frame_rating, this, false);
-        textView = view.findViewById(R.id.TVFPS);
+        tvFPS = view.findViewById(R.id.TVFPS);
+        tvRenderer = view.findViewById(R.id.TVRenderer);
+        tvRenderer.setText("OpenGL");
+        tvGPU = view.findViewById(R.id.TVGPU);
+        if (graphicsDriverConfig != null && graphicsDriverConfig.containsKey("version")) {
+            tvGPU.setText(GPUInformation.getRenderer(graphicsDriverConfig.get("version").toString(), context));
+        } else {
+            tvGPU.setText(GPUInformation.getRenderer(context));
+        }
+        tvRAM = view.findViewById(R.id.TVRAM);
+        totalRAM = getTotalRAM();
+        this.graphicsDriverConfig = graphicsDriverConfig;
         addView(view);
+    }
+    
+    private String getTotalRAM() {
+        ActivityManager activityManager = (ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(memoryInfo);
+        return StringUtils.formatBytes(memoryInfo.totalMem);
+    }
+    
+    private String getAvailableRAM() {
+        ActivityManager activityManager = (ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(memoryInfo);
+        long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
+        return StringUtils.formatBytes(usedMem, false);
+    }
+
+    public void setRenderer(String renderer) {
+        tvRenderer.setText(renderer);
+    }
+
+    public void setGpuName (String gpuName) {
+        tvGPU.setText(gpuName);
+    }
+
+    public void reset() {
+        tvRenderer.setText("OpenGL");
+        if (graphicsDriverConfig != null && graphicsDriverConfig.containsKey("version")) {
+            tvGPU.setText(GPUInformation.getRenderer(graphicsDriverConfig.get("version").toString(), context));
+        }
     }
 
     public void update() {
@@ -62,19 +120,13 @@ public class FrameRating extends FrameLayout implements Runnable {
         if (time >= lastTime + 500) {
             lastFPS = ((float)(frameCount * 1000) / (time - lastTime));
 
-            // Take reading at specified interval
             if (lastReadingTime == 0 || time >= lastReadingTime + READING_INTERVAL_MS) {
                 int currentFPS = Math.round(lastFPS);
                 readingCount++;
                 fpsSum += currentFPS;
 
-                // Track max and min FPS (min must be > 1)
-                if (currentFPS > maxFPS) {
-                    maxFPS = currentFPS;
-                }
-                if (currentFPS > 1 && currentFPS < minFPS) {
-                    minFPS = currentFPS;
-                }
+                if (currentFPS > maxFPS) maxFPS = currentFPS;
+                if (currentFPS > 1 && currentFPS < minFPS) minFPS = currentFPS;
 
                 lastReadingTime = time;
             }
@@ -83,7 +135,6 @@ public class FrameRating extends FrameLayout implements Runnable {
             lastTime = time;
             frameCount = 0;
         }
-
         frameCount++;
     }
 
@@ -100,38 +151,20 @@ public class FrameRating extends FrameLayout implements Runnable {
     public void writeSessionSummary() {
         if (readingCount == 0) return;
 
-        final long sessionLengthMs = sessionStartTime > 0 ?
-            SystemClock.elapsedRealtime() - sessionStartTime : 0;
-        final float sessionLengthSec = sessionLengthMs / 1000.0f;
+        final float sessionLengthSec = getSessionLengthSec();
         final int max = maxFPS;
         final int min = minFPS == Integer.MAX_VALUE ? 0 : minFPS;
-        final float avgFPS = (float) fpsSum / readingCount;
+        final float avgFPS = getAvgFPS();
 
-        Context context = getContext();
         ImageFs imageFs = ImageFs.find(context);
-
-        // Generate unique filename with timestamp
-        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH);
-        String timestamp = dateFormat.format(new Date());
-        File fpsLogFile = new File(imageFs.getTmpDir(), "fps_session" + ".json");
+        File fpsLogFile = new File(imageFs.getTmpDir(), "fps_session.json");
         ExecutorService fileWriteExecutor = Executors.newSingleThreadExecutor();
 
         fileWriteExecutor.execute(() -> {
             try {
-                // Create file if it doesn't exist, or overwrite if it does
-                if (!fpsLogFile.exists()) {
-                    fpsLogFile.createNewFile();
-                }
-
-                // Write JSON format for easy parsing
+                if (!fpsLogFile.exists()) fpsLogFile.createNewFile();
                 String json = String.format(Locale.ENGLISH,
-                    "{\n" +
-                    "  \"length_sec\": %.2f,\n" +
-                    "  \"avg_fps\": %.1f,\n" +
-                    "  \"max_fps\": %d,\n" +
-                    "  \"min_fps\": %d,\n" +
-                    "  \"readings\": %d\n" +
-                    "}\n",
+                    "{\n  \"length_sec\": %.2f,\n  \"avg_fps\": %.1f,\n  \"max_fps\": %d,\n  \"min_fps\": %d,\n  \"readings\": %d\n}\n",
                     sessionLengthSec, avgFPS, max, min, readingCount);
                 try (FileWriter fw = new FileWriter(fpsLogFile, false)) {
                     fw.write(json);
@@ -149,6 +182,7 @@ public class FrameRating extends FrameLayout implements Runnable {
     @Override
     public void run() {
         if (getVisibility() == GONE) setVisibility(View.VISIBLE);
-        textView.setText(String.format(Locale.ENGLISH, "%.1f", lastFPS));
+        tvFPS.setText(String.format(Locale.ENGLISH, "%.1f", lastFPS));
+        tvRAM.setText(getAvailableRAM() + " Used / " + totalRAM + " Total");
     }
 }

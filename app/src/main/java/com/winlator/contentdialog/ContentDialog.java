@@ -21,6 +21,8 @@ import com.winlator.core.Callback;
 
 import java.util.ArrayList;
 
+import android.view.ViewGroup;
+
 public class ContentDialog extends AppCompatDialog {
     private Runnable onConfirmCallback;
     private Runnable onCancelCallback;
@@ -66,6 +68,20 @@ public class ContentDialog extends AppCompatDialog {
         });
 
         setContentView(contentView);
+        
+        // Force white text globally for the dialog content
+        if (contentView instanceof ViewGroup) setTextColorForDialog((ViewGroup) contentView, 0xFFFFFFFF);
+    }
+
+    private void setTextColorForDialog(ViewGroup viewGroup, int color) {
+        for (int i = 0; i < viewGroup.getChildCount(); i++) {
+            View child = viewGroup.getChildAt(i);
+            if (child instanceof ViewGroup) {
+                setTextColorForDialog((ViewGroup) child, color);
+            } else if (child instanceof TextView) {
+                ((TextView) child).setTextColor(color);
+            }
+        }
     }
 
     public View getContentView() {

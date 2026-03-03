@@ -215,18 +215,14 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
         final int enabledPlayerCount = com.winlator.inputcontrols.ControllerManager.getInstance().getEnabledPlayerCount();
         Context context = environment.getContext();
         String filesDir = context.getFilesDir().getAbsolutePath();
-        for (int i = 0; i < 4; i++) {
-            String memPath;
-            if (i == 0) {
-                // Player 1 uses the original, non-numbered path that is known to work.
-                memPath = filesDir + "/imagefs/tmp/gamepad.mem";
-            } else {
-                // Players 2, 3, 4 use a 1-based index.
-                memPath = filesDir + "/imagefs/tmp/gamepad" + i + ".mem";
-            }
+        String actualTmpDir = filesDir + "/imagefs/tmp";
+        
+        // Ensure actual directory exists
+        new File(actualTmpDir).mkdirs();
 
+        for (int i = 0; i < 4; i++) {
+            String memPath = actualTmpDir + (i == 0 ? "/gamepad.mem" : "/gamepad" + i + ".mem");
             File memFile = new File(memPath);
-            memFile.getParentFile().mkdirs();
             try (RandomAccessFile raf = new RandomAccessFile(memFile, "rw")) {
                 raf.setLength(64);
             } catch (IOException e) {
@@ -243,6 +239,7 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
 
         EnvVars envVars = new EnvVars();
         envVars.put("EVSHIM_MAX_PLAYERS", String.valueOf(enabledPlayerCount));
+        envVars.put("EVSHIM_DATA_DIR", "/tmp"); // Glibc proot maps guest /tmp to host filesDir/imagefs/tmp
         addBox64EnvVars(envVars, enableBox86_64Logs);
         envVars.put("HOME", imageFs.home_path);
         envVars.put("USER", ImageFs.USER);

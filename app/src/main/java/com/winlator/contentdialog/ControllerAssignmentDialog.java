@@ -68,12 +68,9 @@ public class ControllerAssignmentDialog {
 
         restartRequiredView = dialog.getContentView().findViewById(R.id.TVRestartRequired);
 
-        // Apply theme colors safely
+        // Apply white text to the whole content
         View root = dialog.getContentView();
-        if (root != null) {
-            root.setBackgroundColor(0xFF1A1A2E);
-            if (root instanceof ViewGroup) setTextColorForDialog((ViewGroup) root, 0xFFFFFFFF);
-        }
+        if (root != null && root instanceof ViewGroup) setTextColorForDialog((ViewGroup) root, 0xFFFFFFFF);
 
         populateView();
         setupListeners();

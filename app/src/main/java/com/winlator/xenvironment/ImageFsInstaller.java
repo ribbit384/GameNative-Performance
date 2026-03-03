@@ -13,7 +13,7 @@ import app.gamenative.utils.ContainerUtils;
 import app.gamenative.utils.MarkerUtils;
 
 // import com.winlator.MainActivity;
-// import com.winlator.R;
+// import app.gamenative.R;
 // import com.winlator.SettingsFragment;
 import com.winlator.PrefManager;
 import com.winlator.container.Container;
@@ -139,6 +139,24 @@ public abstract class ImageFsInstaller {
 
             if (success) {
                 Log.d("ImageFsInstaller", "Successfully installed system files");
+                chmodRecursive(rootDir, 0755);
+
+                // Package Redirection Symlink Fix:
+                try {
+                    String[] hardcodedPkgs = {"com.winlator.cmod", "app.gamenative"};
+                    String currentPkg = context.getPackageName();
+                    File fakeDataDir = new File(rootDir, "data/data");
+                    fakeDataDir.mkdirs();
+                    for (String pkg : hardcodedPkgs) {
+                        File pkgDir = new File(fakeDataDir, pkg);
+                        if (!pkgDir.exists()) {
+                            FileUtils.symlink("/data/data/" + currentPkg, pkgDir.getAbsolutePath());
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e("ImageFsInstaller", "Failed to setup package redirection symlinks", e);
+                }
+
                 ContainerManager containerManager = new ContainerManager(context);
 
                 installWineFromDownloads(context);
@@ -156,6 +174,18 @@ public abstract class ImageFsInstaller {
             return success;
             // dialog.closeOnUiThread();
         });
+    }
+
+    private static void chmodRecursive(File file, int mode) {
+        if (file.isDirectory()) {
+            File[] files = file.listFiles();
+            if (files != null) {
+                for (File child : files) {
+                    chmodRecursive(child, mode);
+                }
+            }
+        }
+        FileUtils.chmod(file, mode);
     }
 
     private static void installGuestLibs(Context ctx) {

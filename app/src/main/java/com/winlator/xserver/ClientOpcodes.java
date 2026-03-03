@@ -5,10 +5,10 @@ public abstract class ClientOpcodes {
     public static final byte CHANGE_WINDOW_ATTRIBUTES = 2;
     public static final byte GET_WINDOW_ATTRIBUTES = 3;
     public static final byte DESTROY_WINDOW = 4;
-    public static final byte DESTROY_SUB_WINDOW = 5;
+    public static final byte DESTROY_SUB_WINDOWS = 5;
     public static final byte REPARENT_WINDOW = 7;
     public static final byte MAP_WINDOW = 8;
-    public static final byte MAP_SUB_WINDOW = 9;
+    public static final byte MAP_SUB_WINDOWS = 9;
     public static final byte UNMAP_WINDOW = 10;
     public static final byte CONFIGURE_WINDOW = 12;
     public static final byte GET_GEOMETRY = 14;
@@ -23,8 +23,6 @@ public abstract class ClientOpcodes {
     public static final byte SEND_EVENT = 25;
     public static final byte GRAB_POINTER = 26;
     public static final byte UNGRAB_POINTER = 27;
-    public static final byte GRAB_SERVER = 36;
-    public static final byte UNGRAB_SERVER = 37;
     public static final byte QUERY_POINTER = 38;
     public static final byte TRANSLATE_COORDINATES = 40;
     public static final byte WARP_POINTER = 41;

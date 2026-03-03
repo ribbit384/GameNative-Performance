@@ -104,11 +104,18 @@ public abstract class DrawRequests {
         short width = inputStream.readShort();
         short height = inputStream.readShort();
 
-        Drawable srcDrawable =  client.xServer.drawableManager.getDrawable(srcDrawableId);
+        Drawable srcDrawable = client.xServer.drawableManager.getDrawable(srcDrawableId);
         if (srcDrawable == null) throw new BadDrawable(srcDrawableId);
+        if (srcDrawable.getData() == null) {
+            throw new IllegalStateException("srcDrawable has null data!");
+        }
 
-        Drawable dstDrawable =  client.xServer.drawableManager.getDrawable(dstDrawableId);
+        Drawable dstDrawable = client.xServer.drawableManager.getDrawable(dstDrawableId);
         if (dstDrawable == null) throw new BadDrawable(dstDrawableId);
+        if (dstDrawable.getData() == null) {
+            throw new IllegalStateException("dstDrawable has null data!");
+        }
+
 
         GraphicsContext graphicsContext =  client.xServer.graphicsContextManager.getGraphicsContext(gcId);
         if (graphicsContext == null) throw new BadGraphicsContext(gcId);

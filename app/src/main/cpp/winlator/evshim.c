@@ -172,14 +172,24 @@ static void initialize_all_pads(void)
 
         char path[256];
         if (data_dir) {
-            snprintf(path, sizeof path,
-                     "%s/files/imagefs/tmp/gamepad%s.mem",
-                     data_dir,
-                     (i == 0) ? "" : (char[2]){'0' + i, '\0'});
-        } else {
-            snprintf(path, sizeof path,
-                     "/tmp/gamepad%s.mem",
-                     (i == 0) ? "" : (char[2]){'0' + i, '\0'});
+            // First check if it's a full path to the .mem file
+            if (data_dir[0] == '/') {
+                if (strstr(data_dir, ".mem")) {
+                    snprintf(path, sizeof path, "%s", data_dir);
+                } else {
+                    // Try to find it in the provided directory (host or guest perspective)
+                    snprintf(path, sizeof path, "%s/gamepad%s.mem", data_dir, (i == 0) ? "" : (char[2]){'0' + i, '\0'});
+                    if (access(path, F_OK) != 0) {
+                        // Fallback to legacy structure if not found directly
+                        snprintf(path, sizeof path, "%s/files/imagefs/tmp/gamepad%s.mem", data_dir, (i == 0) ? "" : (char[2]){'0' + i, '\0'});
+                    }
+                }
+            }
+        } 
+        
+        // Final fallback if path doesn't exist or data_dir was missing
+        if (!data_dir || access(path, F_OK) != 0) {
+            snprintf(path, sizeof path, "/tmp/gamepad%s.mem", (i == 0) ? "" : (char[2]){'0' + i, '\0'});
         }
 
         /* open once – store for reader + writer */

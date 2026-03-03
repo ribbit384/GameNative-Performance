@@ -37,7 +37,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private Callback<Integer> terminationCallback;
     private static final Object lock = new Object();
     private boolean wow64Mode = true;
-    private File workingDir;
+    public File workingDir;
     private WineInfo wineInfo;
     private Container container;
 

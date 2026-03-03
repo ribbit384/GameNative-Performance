@@ -6,13 +6,17 @@ import java.nio.ByteBuffer;
 
 public class GPUImage extends Texture {
     private long hardwareBufferPtr;
+
+    public long getHardwareBufferPtr() {
+        return hardwareBufferPtr;
+    }
     private long imageKHRPtr;
     private ByteBuffer virtualData;
     private short stride;
     private static boolean supported = false;
 
     static {
-        System.loadLibrary("extras");
+        System.loadLibrary("winlator");
     }
 
     public GPUImage(short width, short height) {
@@ -28,7 +32,7 @@ public class GPUImage extends Texture {
             System.err.println("Error: Failed to create hardware buffer");
         }
     }
-
+    
     public GPUImage(int socketFd) {
         hardwareBufferPtr = hardwareBufferFromSocket(socketFd);
         if (hardwareBufferPtr != 0) {
@@ -102,12 +106,8 @@ public class GPUImage extends Texture {
         gpuImage.destroy();
     }
 
-    public long getHardwareBufferPtr() {
-        return this.hardwareBufferPtr;
-    }
-
     private native long hardwareBufferFromSocket(int fd);
-
+    
     private native long createHardwareBuffer(short width, short height);
 
     private native void destroyHardwareBuffer(long hardwareBufferPtr);

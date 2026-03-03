@@ -69,7 +69,7 @@ public class InputControlsView extends View {
     private Timer mouseMoveTimer;
     private final PointF mouseMoveOffset = new PointF();
     private boolean showTouchscreenControls = true;
-    private boolean showJoysticks = true;
+    private boolean showJoysticks = app.gamenative.PrefManager.getShowJoysticks();
 
     private Handler timeoutHandler; // Reference to the activity's timeout handler
     private Runnable hideControlsRunnable; // Runnable to hide the controls
@@ -91,6 +91,7 @@ public class InputControlsView extends View {
 
     public void setJoysticksVisible(boolean visible) {
         this.showJoysticks = visible;
+        app.gamenative.PrefManager.setShowJoysticks(visible);
         invalidate();
     }
 

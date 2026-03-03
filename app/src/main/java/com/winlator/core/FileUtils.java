@@ -478,6 +478,28 @@ public abstract class FileUtils {
         return null;
     }
 
+    public static String getUriFileName(Context context, Uri uri) {
+        String name = "";
+        try (android.database.Cursor cursor = context.getContentResolver().query(uri, null, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (index != -1) name = cursor.getString(index);
+            }
+        }
+        return name;
+    }
+
+    public static boolean copy(Context context, Uri uri, File dstFile) {
+        try (InputStream inStream = context.getContentResolver().openInputStream(uri);
+             OutputStream outStream = new FileOutputStream(dstFile)) {
+            StreamUtils.copy(inStream, outStream);
+            return true;
+        }
+        catch (IOException e) {
+            return false;
+        }
+    }
+
     public static boolean writeToBinaryFile(String filename, int position, int data) {
         try (RandomAccessFile file = new RandomAccessFile(filename, "rw")) {
             file.seek(position);

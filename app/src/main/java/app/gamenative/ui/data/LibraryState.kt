@@ -79,4 +79,7 @@ data class LibraryState(
 
     // AIO Store toggle: true = single "Store" tab, false = individual store tabs
     val aioStoreEnabled: Boolean = PrefManager.aioStoreEnabled,
+
+    // PERSISTED tab index for FRONTEND view
+    val frontendSelectedTabIdx: Int = 0,
 )

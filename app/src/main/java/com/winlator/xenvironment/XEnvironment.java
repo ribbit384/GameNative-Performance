@@ -14,6 +14,8 @@ import com.winlator.xenvironment.components.BionicProgramLauncherComponent;
 import com.winlator.xenvironment.components.GlibcProgramLauncherComponent;
 import com.winlator.xenvironment.components.GuestProgramLauncherComponent;
 import com.winlator.xenvironment.components.PulseAudioComponent;
+import com.winlator.xenvironment.components.XServerComponent;
+import com.winlator.xserver.XServer;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -45,6 +47,11 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
 
     public ImageFs getImageFs() {
         return imageFs;
+    }
+
+    public XServer getXServer() {
+        XServerComponent xServerComponent = getComponent(XServerComponent.class);
+        return xServerComponent != null ? xServerComponent.getXServer() : null;
     }
 
     public void addComponent(EnvironmentComponent environmentComponent) {

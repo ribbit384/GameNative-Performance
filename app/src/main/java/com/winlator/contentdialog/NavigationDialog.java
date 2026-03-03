@@ -39,6 +39,8 @@ public class NavigationDialog extends ContentDialog {
     public static final int ACTION_SHOW_JOYSTICKS = 12;
     public static final int ACTION_TOUCH_MENU = 13;
     public static final int ACTION_TOUCH_TRANSPARENCY = 14;
+    public static final int ACTION_SCREEN_EFFECT = 15;
+    public static final int ACTION_NATIVE_RENDERING = 16;
 
     public interface NavigationListener {
         void onNavigationItemSelected(int itemId);
@@ -49,37 +51,34 @@ public class NavigationDialog extends ContentDialog {
 
         if (getWindow() != null) {
             getWindow().setGravity(Gravity.CENTER);
-            // Make the window background transparent — the visible rounded-rect background
-            // is moved onto the content view so it wraps tightly around the button grid,
-            // regardless of any internal padding the dialog framework applies.
             getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            getWindow().setLayout(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
 
-        // Put the dialog background directly on the content view
         View rootView = getContentView();
         rootView.setBackgroundResource(R.drawable.content_dialog_background);
-        int pad = dpToPx(8, context);
+        int pad = dpToPx(16, context);
         rootView.setPadding(pad, pad, pad, pad);
 
-        // Hide the title bar and bottom bar for a clean menu-only dialog
         findViewById(R.id.LLTitleBar).setVisibility(View.GONE);
         findViewById(R.id.LLBottomBar).setVisibility(View.GONE);
         findViewById(R.id.LLTopPanel).setVisibility(View.GONE);
 
-        // Fix the FrameLayout: change from weighted (0dp + weight) to wrap_content
         FrameLayout frameLayout = findViewById(R.id.FrameLayout);
         LinearLayout.LayoutParams flp = (LinearLayout.LayoutParams) frameLayout.getLayoutParams();
+        flp.width = LinearLayout.LayoutParams.WRAP_CONTENT;
         flp.height = LinearLayout.LayoutParams.WRAP_CONTENT;
         flp.weight = 0;
         frameLayout.setLayoutParams(flp);
 
         GridLayout grid = findViewById(R.id.main_menu_grid);
-        grid.setPadding(dpToPx(2, context), dpToPx(2, context), dpToPx(2, context), dpToPx(2, context));
+        grid.setBackgroundColor(Color.TRANSPARENT);
+        grid.setPadding(dpToPx(4, context), dpToPx(4, context), dpToPx(4, context), dpToPx(4, context));
         int orientation = context.getResources().getConfiguration().orientation;
         if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            grid.setColumnCount(5);
+            grid.setColumnCount(4);
         } else {
-            grid.setColumnCount(2);
+            grid.setColumnCount(3);
         }
 
         int pauseIcon = isGamePaused ? R.drawable.icon_play : R.drawable.icon_pause;
@@ -92,11 +91,15 @@ public class NavigationDialog extends ContentDialog {
         int joysticksTextRes = areJoysticksVisible ? R.string.hide_joysticks : R.string.show_joysticks;
         addMenuItem(context, grid, R.drawable.icon_gamepad, joysticksTextRes, ACTION_SHOW_JOYSTICKS, listener, 1.0f);
 
+        addMenuItem(context, grid, R.drawable.icon_screen_effect, R.string.screen_effect, ACTION_SCREEN_EFFECT, listener, 1.0f);
+
         addMenuItem(context, grid, R.drawable.icon_settings, R.string.touch, ACTION_TOUCH_MENU, listener, 1.0f);
 
         addMenuItem(context, grid, R.drawable.icon_gamepad, R.string.controller_manager, ACTION_CONTROLLER_MANAGER, listener, 1.0f);
 
         addMenuItem(context, grid, R.drawable.icon_monitor, R.string.stretch_to_fullscreen, ACTION_STRETCH_TO_FULLSCREEN, listener, 1.0f);
+
+        addMenuItem(context, grid, R.drawable.icon_monitor, R.string.native_rendering, ACTION_NATIVE_RENDERING, listener, 1.0f);
 
         addMenuItem(context, grid, R.drawable.icon_task_manager, R.string.task_manager, ACTION_TASK_MANAGER, listener, 1.0f);
 
@@ -108,37 +111,40 @@ public class NavigationDialog extends ContentDialog {
     }
 
     private void addMenuItem(Context context, GridLayout grid, int iconRes, int titleRes, int itemId, NavigationListener listener, float alpha) {
-        int padding = dpToPx(2, context);
+        int padding = dpToPx(12, context);
         LinearLayout layout = new LinearLayout(context);
         layout.setPadding(padding, padding, padding, padding);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
+        layout.setBackgroundColor(Color.TRANSPARENT);
+        
         layout.setOnClickListener(view -> {
             listener.onNavigationItemSelected(itemId);
             dismiss();
         });
 
-        int size = dpToPx(40, context);
-        View icon = new View(context);
-        icon.setBackground(AppCompatResources.getDrawable(context, iconRes));
-        if (icon.getBackground() != null) {
-            icon.getBackground().setTint(context.getColor(R.color.navigation_dialog_item_color));
-        }
-        icon.setAlpha(alpha); // Apply alpha for greying out
+        int size = dpToPx(32, context);
+        android.widget.ImageView icon = new android.widget.ImageView(context);
+        icon.setImageResource(iconRes);
+        icon.setColorFilter(Color.WHITE, android.graphics.PorterDuff.Mode.SRC_IN);
+        icon.setAlpha(alpha);
+        icon.setBackgroundColor(Color.TRANSPARENT);
+        
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
         lp.gravity = Gravity.CENTER_HORIZONTAL;
         icon.setLayoutParams(lp);
         layout.addView(icon);
 
-        int width = dpToPx(100, context);
+        int width = dpToPx(80, context);
         TextView text = new TextView(context);
         text.setLayoutParams(new ViewGroup.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
         text.setText(context.getString(titleRes));
         text.setGravity(Gravity.CENTER);
         text.setLines(2);
-        text.setTextSize(14);
-        text.setTextColor(context.getColor(R.color.navigation_dialog_item_color));
-        text.setAlpha(alpha); // Apply alpha for greying out
+        text.setTextSize(11);
+        text.setTextColor(Color.WHITE);
+        text.setShadowLayer(2.0f, 0, 0, Color.BLACK);
+        text.setAlpha(alpha);
         Typeface tf = ResourcesCompat.getFont(context, R.font.bricolage_grotesque_regular);
         if (tf != null) {
             text.setTypeface(tf);
@@ -174,7 +180,6 @@ public class NavigationDialog extends ContentDialog {
         dialog.findViewById(R.id.BTCancel).setVisibility(View.GONE);
         ((TextView)dialog.findViewById(R.id.BTConfirm)).setText(R.string.save);
 
-        // Make the dialog wider
         View frameLayout = dialog.findViewById(R.id.FrameLayout);
         if (frameLayout != null) {
             ViewGroup.LayoutParams lp = frameLayout.getLayoutParams();

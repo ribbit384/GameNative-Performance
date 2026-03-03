@@ -119,8 +119,9 @@ internal fun LibraryListPane(
     onFocusChanged: (LibraryItem?) -> Unit = {},
     isOffline: Boolean = false,
     isAnyDialogOpen: Boolean = false,
-    onFrontendTabChanged: (Boolean) -> Unit = {},
-) {
+    onFrontendTabChanged: (Int) -> Unit = {},
+    ) {
+
     val context = LocalContext.current
     val snackBarHost = remember { SnackbarHostState() }
 
@@ -215,7 +216,7 @@ internal fun LibraryListPane(
                     isAnyDialogOpen = isAnyDialogOpen,
                     onPauseDownload = {},
                     onCancelDownload = {},
-                    onFrontendTabChanged = onFrontendTabChanged,
+                    onTabChanged = onFrontendTabChanged,
                 )
                             } else {                Column(
                     modifier = Modifier
@@ -551,6 +552,7 @@ private fun Preview_LibraryListPane() {
                 onGoOnline = { },
                 onRefresh = { },
                 onSourceToggle = { },
+                onFrontendTabChanged = { }
             )
         }
     }

@@ -21,7 +21,7 @@ public class ControllerMenuDialog extends ContentDialog {
     public ControllerMenuDialog(@NonNull Context context, NavigationDialog.NavigationListener listener) {
         super(context, R.layout.navigation_dialog);
         if (getWindow() != null) {
-            getWindow().setBackgroundDrawableResource(R.drawable.navigation_dialog_background);
+            getWindow().setBackgroundDrawableResource(R.drawable.content_dialog_background);
         }
         // Hide the title bar and bottom bar
         findViewById(R.id.LLTitleBar).setVisibility(View.GONE);
@@ -58,7 +58,7 @@ public class ControllerMenuDialog extends ContentDialog {
         View icon = new View(context);
         icon.setBackground(AppCompatResources.getDrawable(context, iconRes));
         if (icon.getBackground() != null) {
-            icon.getBackground().setTint(context.getColor(R.color.navigation_dialog_item_color));
+            icon.getBackground().setTint(context.getColor(R.color.white));
         }
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
         lp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -71,7 +71,7 @@ public class ControllerMenuDialog extends ContentDialog {
         text.setText(context.getString(titleRes));
         text.setGravity(Gravity.CENTER);
         text.setLines(2);
-        text.setTextColor(context.getColor(R.color.navigation_dialog_item_color));
+        text.setTextColor(context.getColor(R.color.white));
         Typeface tf = ResourcesCompat.getFont(context, R.font.bricolage_grotesque_regular);
         if (tf != null) {
             text.setTypeface(tf);

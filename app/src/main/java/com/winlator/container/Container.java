@@ -58,9 +58,13 @@ public class Container {
             "MEDIACONV_BLANK_AUDIO_FILE=" + DATA_DIR + "/files/imagefs/home/xuser/blank.wav",
             "MEDIACONV_BLANK_VIDEO_FILE=" + DATA_DIR + "/files/imagefs/home/xuser/blank.mkv",
     };
-    public static final String DEFAULT_DRIVES = "D:"+Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"E:" + DATA_DIR + "/storage";
+    public static String DEFAULT_DRIVES = "D:"+Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)+"E:" + DATA_DIR + "/storage";
     public static final String DEFAULT_VARIANT = DefaultVersion.VARIANT;
     public static final String DEFAULT_WINE_VERSION = DefaultVersion.WINE_VERSION;
+
+    public static void init(android.content.Context context) {
+        DEFAULT_DRIVES = "D:" + Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) + "E:" + context.getFilesDir().getAbsolutePath() + "/storage";
+    }
     public static final byte STARTUP_SELECTION_NORMAL = 0;
     public static final byte STARTUP_SELECTION_ESSENTIAL = 1;
     public static final byte STARTUP_SELECTION_AGGRESSIVE = 2;
@@ -148,6 +152,15 @@ public class Container {
     private boolean rootPerformanceMode = false;
     private String dxvkVersion = null;
     private String vkd3dVersion = null;
+    private boolean fullscreenStretched = false;
+
+    public boolean isFullscreenStretched() {
+        return fullscreenStretched;
+    }
+
+    public void setFullscreenStretched(boolean fullscreenStretched) {
+        this.fullscreenStretched = fullscreenStretched;
+    }
 
     public String getDxvkVersion() {
         return dxvkVersion;

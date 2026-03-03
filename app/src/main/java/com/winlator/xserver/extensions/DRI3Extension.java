@@ -1,19 +1,16 @@
 package com.winlator.xserver.extensions;
 
+import android.util.Log;
+import com.winlator.renderer.GPUImage;
+
 import static com.winlator.xserver.XClientRequestHandler.RESPONSE_CODE_SUCCESS;
 
-import android.util.Log;
-
 import com.winlator.core.Callback;
-import com.winlator.renderer.GPUImage;
-import com.winlator.renderer.Texture;
 import com.winlator.sysvshm.SysVSharedMemory;
-import com.winlator.widget.XServerView;
 import com.winlator.xconnector.XConnectorEpoll;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
 import com.winlator.xconnector.XStreamLock;
-import com.winlator.xenvironment.components.VortekRendererComponent;
 import com.winlator.xserver.Drawable;
 import com.winlator.xserver.Pixmap;
 import com.winlator.xserver.Window;
@@ -24,13 +21,11 @@ import com.winlator.xserver.errors.BadAlloc;
 import com.winlator.xserver.errors.BadDrawable;
 import com.winlator.xserver.errors.BadIdChoice;
 import com.winlator.xserver.errors.BadImplementation;
-import com.winlator.xserver.errors.BadPixmap;
 import com.winlator.xserver.errors.BadWindow;
 import com.winlator.xserver.errors.XRequestError;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Objects;
 
 public class DRI3Extension implements Extension {
     public static final byte MAJOR_OPCODE = -102;
@@ -117,34 +112,45 @@ public class DRI3Extension implements Extension {
     }
 
     private void pixmapFromBuffers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        Log.d("Dri3", "Received pixmap from buffers");
         int pixmapId = inputStream.readInt();
+        Log.d("Dri3", "Read pixmap id " + pixmapId);
         int windowId = inputStream.readInt();
+        Log.d("Dri3", "Read window id " + windowId);
         inputStream.skip(4);
         short width = inputStream.readShort();
+        Log.d("Dri3", "Read width " + width);
         short height = inputStream.readShort();
+        Log.d("Dri3", "Read height " + height);
         int stride = inputStream.readInt();
+        Log.d("Dri3", "Read stride " + stride);
         int offset = inputStream.readInt();
+        Log.d("Dri3", "Read offset " + offset);
         inputStream.skip(24);
         byte depth = inputStream.readByte();
+        Log.d("Dri3", "Read depth " + depth);
         inputStream.skip(3);
         long modifiers = inputStream.readLong();
-
+        Log.d("Dri3", "Read modifiers " + modifiers);
+        
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
         Pixmap pixmap = client.xServer.pixmapManager.getPixmap(pixmapId);
         if (pixmap != null) throw new BadIdChoice(pixmapId);
-
+        
         int fd = inputStream.getAncillaryFd();
         long size = (long)stride * height;
 
         if (modifiers == 1255) {
+            Log.d("Dri3", "Creating pixmap from AHardwareBuffer");
             pixmapFromHardwareBuffer(client, pixmapId, width, height, depth, fd);
         }
         else if (modifiers == 1274) {
+            Log.d("Dri3", "Creating pixmap from dmabuf filedescriptor"); 
             pixmapFromFd(client, pixmapId, width, height, stride, offset, depth, fd, size);
-        }
+        }    
     }
-
+    
     private void pixmapFromHardwareBuffer(XClient client, int pixmapId, short width, short height, byte depth, int fd) throws IOException, XRequestError {
         try {
             GPUImage gpuImage = new GPUImage(fd);
@@ -154,14 +160,14 @@ public class DRI3Extension implements Extension {
         }
         finally {
             XConnectorEpoll.closeFd(fd);
-        }
+        }   
     }
 
     private void pixmapFromFd(XClient client, int pixmapId, short width, short height, int stride, int offset, byte depth, int fd, long size)  throws IOException, XRequestError {
         try {
             ByteBuffer buffer = SysVSharedMemory.mapSHMSegment(fd, size, offset, true);
             if (buffer == null) throw new BadAlloc();
-
+            
             short totalWidth = (short)(stride / 4);
             Drawable drawable = client.xServer.drawableManager.createDrawable(pixmapId, totalWidth, height, depth);
             drawable.setData(buffer);

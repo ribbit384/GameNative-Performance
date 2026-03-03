@@ -56,8 +56,8 @@ android {
         minSdk = 26
         targetSdk = 28
 
-        versionCode = 11
-        versionName = "1.80"
+        versionCode = 12
+        versionName = "2.00"
 
         buildConfigField("boolean", "GOLD", "false")
         fun secret(name: String) =
@@ -78,7 +78,7 @@ android {
         )
 
         ndk {
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+            abiFilters.addAll(listOf("arm64-v8a"))
         }
 
         // Localization support - specify which languages to include
@@ -241,6 +241,17 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
 
     // Support
+    implementation("androidx.preference:preference:1.2.1")
+    implementation("com.github.luben:zstd-jni:1.5.2-3@aar")
+    implementation(files("libs/MidiSynth/MidiSynth.jar"))
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation("com.google.code.gson:gson:2.8.8")
+    implementation("com.github.bumptech.glide:glide:4.11.0")
+    implementation("com.kohlschutter.junixsocket:junixsocket-common:2.6.0")
+    implementation("com.kohlschutter.junixsocket:junixsocket-native-common:2.6.0")
+    annotationProcessor("com.github.bumptech.glide:compiler:4.11.0")
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.preference)

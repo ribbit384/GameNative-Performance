@@ -135,6 +135,7 @@ fun HomeLibraryScreen(
         onAioStoreToggle = viewModel::onAioStoreToggle,
         onAddCustomGameFolder = viewModel::addCustomGameFolder,
         onFocusChanged = { if (isFrontend) focusedFrontendItem = it },
+        onFrontendTabChanged = viewModel::onFrontendTabChanged,
         isOffline = isOffline,
         isAnyDialogOpen = isAnyDialogOpen,
     )
@@ -178,12 +179,14 @@ private fun LibraryScreenContent(
     onLogout: () -> Unit,
     onGoOnline: () -> Unit,
     onSourceToggle: (GameSource) -> Unit,
-    onAioStoreToggle: () -> Unit = {},
+    onAioStoreToggle: () -> Unit,
     onAddCustomGameFolder: (String) -> Unit,
-    onFocusChanged: (LibraryItem?) -> Unit = {},
+    onFocusChanged: (LibraryItem?) -> Unit,
+    onFrontendTabChanged: (Int) -> Unit,
     isOffline: Boolean = false,
     isAnyDialogOpen: Boolean = false,
-) {
+    ) {
+
     val context = LocalContext.current
     var selectedAppId by remember { mutableStateOf<String?>(null) }
     // Keep a stable reference to the selected item so detail view doesn't disappear during list refresh/pagination.
@@ -313,7 +316,20 @@ private fun LibraryScreenContent(
                 onFocusChanged = onFocusChanged,
                 isOffline = isOffline,
                 isAnyDialogOpen = isAnyDialogOpen,
-                onFrontendTabChanged = { isDownloads -> frontendOnDownloadsTab = isDownloads },
+                onFrontendTabChanged = { index ->
+                    onFrontendTabChanged(index)
+                    // Update local state for FAB visibility
+                    // We need to know if it's the downloads tab
+                    // For simplicity, we can check if the index matches what we expect
+                    // but better to just use the index to determine visibility
+                    // In LibraryFrontendPane, the tabs list size can change, but Downloads is usually 1 or 2
+                    // Let's just track the index and let the pane handle its own visibility if possible, 
+                    // or keep tracking this boolean but update it correctly.
+                    // If aioStoreEnabled is true: LIBRARY(0), STORE(1), DOWNLOADS(2)
+                    // If aioStoreEnabled is false: LIBRARY(0), DOWNLOADS(1), ...
+                    val isDownloads = if (state.aioStoreEnabled) index == 2 else index == 1
+                    frontendOnDownloadsTab = isDownloads
+                },
             )
         } else {
             LibraryDetailPane(
@@ -490,6 +506,9 @@ private fun Preview_LibraryScreenContent() {
             onGoOnline = {},
             onSourceToggle = {},
             onAddCustomGameFolder = {},
+            onFocusChanged = {},
+            onFrontendTabChanged = {},
+            onAioStoreToggle = {}
         )
     }
 }

@@ -69,6 +69,8 @@ class PluviaApp : SplitCompatApplication() {
         // Initialize GOGConstants
         app.gamenative.service.gog.GOGConstants.init(this)
 
+        com.winlator.container.Container.init(this)
+
         DownloadService.populateDownloadService(this)
 
         appScope.launch {
@@ -116,8 +118,10 @@ class PluviaApp : SplitCompatApplication() {
         internal var onDestinationChangedListener: NavChangedListener? = null
 
         // TODO: find a way to make this saveable, this is terrible (leak that memory baby)
-        internal var xEnvironment: XEnvironment? = null
-        internal var xServerView: XServerView? = null
+        @JvmField
+        var xEnvironment: XEnvironment? = null
+        @JvmField
+        var xServerView: XServerView? = null
         var inputControlsView: InputControlsView? = null
         var inputControlsManager: InputControlsManager? = null
         var touchpadView: TouchpadView? = null
