@@ -23,8 +23,12 @@ object DownloadService {
         private set(value) {
             field = value
         }
+    // Application context for components that need it
+    var appContext: Context? = null
+        private set
 
     fun populateDownloadService(context: Context) {
+        appContext = context.applicationContext
         baseDataDirPath = context.dataDir.path
         baseCacheDirPath = context.cacheDir.path
         // Prefer the parent of external files dir (Android/data/<package>) so we can create siblings of /files

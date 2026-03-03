@@ -59,6 +59,7 @@ import app.gamenative.service.SteamService
 import app.gamenative.ui.component.dialog.LoadingDialog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -83,6 +84,8 @@ object Net {
 
 }
 
+enum class DriverSource { GN, MTR }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverManagerDialog(open: Boolean, onDismiss: () -> Unit) {
@@ -97,8 +100,12 @@ fun DriverManagerDialog(open: Boolean, onDismiss: () -> Unit) {
     var totalBytes by remember { mutableStateOf(-1L) }
     val scope = rememberCoroutineScope()
 
+    // Source selection
+    var selectedSource by remember { mutableStateOf(DriverSource.GN) }
+
     // Driver manifest handling
     var driverManifest by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var mtrDriverManifest by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var isLoadingManifest by remember { mutableStateOf(true) }
     var manifestError by remember { mutableStateOf<String?>(null) }
 
@@ -126,46 +133,59 @@ fun DriverManagerDialog(open: Boolean, onDismiss: () -> Unit) {
         } catch (_: Exception) {}
     }
 
-    // Load driver manifest from the remote URL
+    // Load manifests
     LaunchedEffect(Unit) {
         refreshDriverList()
 
-        // Fetch the driver manifest
-        Timber.d("DriverManagerDialog: Fetching driver manifest...")
+        // Fetch GN manifest
         scope.launch(Dispatchers.IO) {
             try {
                 val manifestUrl = "https://raw.githubusercontent.com/utkarshdalal/gamenative-landing-page/refs/heads/main/data/manifest.json"
-                val request = Request.Builder()
-                    .url(manifestUrl)
-                    .build()
-
+                val request = Request.Builder().url(manifestUrl).build()
                 val response = Net.http.newCall(request).execute()
                 if (response.isSuccessful) {
                     val jsonString = response.body?.string() ?: "{}"
                     val jsonObject = Json.decodeFromString<JsonObject>(jsonString)
-
-                    // Convert to map of String to String
                     val manifest = jsonObject.entries.associate { it.key to it.value.toString().trim('"') }
-
                     withContext(Dispatchers.Main) {
                         driverManifest = manifest
-                        isLoadingManifest = false
+                        if (selectedSource == DriverSource.GN) isLoadingManifest = false
                     }
-                    Timber.d("DriverManagerDialog: Manifest loaded with ${manifest.size} entries")
-                } else {
-                    withContext(Dispatchers.Main) {
-                        manifestError = ctx.getString(R.string.driver_error_manifest, response.code)
-                        isLoadingManifest = false
-                    }
-                    Timber.w("DriverManagerDialog: Failed to load manifest HTTP=${response.code}")
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    manifestError = ctx.getString(R.string.driver_error_loading, e.message ?: "")
-                    isLoadingManifest = false
-                }
-                Timber.e(e, "DriverManagerDialog: Error loading driver manifest")
+                Timber.e(e, "DriverManagerDialog: Error loading GN manifest")
             }
+        }
+
+        // Fetch MTR manifest
+        scope.launch(Dispatchers.IO) {
+            try {
+                val mtrApiUrl = "https://api.github.com/repos/maxjivi05/Components/contents/Drivers"
+                val request = Request.Builder().url(mtrApiUrl).build()
+                val response = Net.http.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val jsonString = response.body?.string() ?: "[]"
+                    val jsonArray = Json.parseToJsonElement(jsonString).jsonArray
+                    val manifest = jsonArray.associate { 
+                        val obj = it.jsonObject
+                        obj["name"]!!.toString().trim('"') to obj["download_url"]!!.toString().trim('"')
+                    }
+                    withContext(Dispatchers.Main) {
+                        mtrDriverManifest = manifest
+                        if (selectedSource == DriverSource.MTR) isLoadingManifest = false
+                    }
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "DriverManagerDialog: Error loading MTR manifest")
+            }
+        }
+    }
+
+    LaunchedEffect(selectedSource) {
+        selectedDriverKey = ""
+        isLoadingManifest = when (selectedSource) {
+            DriverSource.GN -> driverManifest.isEmpty()
+            DriverSource.MTR -> mtrDriverManifest.isEmpty()
         }
     }
 
@@ -189,81 +209,65 @@ fun DriverManagerDialog(open: Boolean, onDismiss: () -> Unit) {
         }
     }
 
-    // Function to download and install a driver from URL
-    val downloadAndInstallDriver = { driverFileName: String ->
+    // Common download and install logic
+    val downloadAndInstall = { fileName: String, url: String? ->
         scope.launch {
-            val overallStart = System.currentTimeMillis()
             isDownloading = true
             downloadProgress = 0f
             downloadBytes = 0L
             totalBytes = -1L
             try {
-                Timber.d("DriverManagerDialog: Starting download drivers/$driverFileName")
-                val destFile = File(ctx.cacheDir, driverFileName)
-                var lastUpdate = 0L
-                // Use shared downloader with automatic domain fallback and built-in .part handling
-                SteamService.fetchFileWithFallback(
-                    fileName = "drivers/$driverFileName",
-                    dest = destFile,
-                    context = ctx
-                ) { progress ->
-                    val now = System.currentTimeMillis()
-                    if (now - lastUpdate > 300) {
-                        lastUpdate = now
-                        val clamped = progress.coerceIn(0f, 1f)
-                        scope.launch(Dispatchers.Main) { downloadProgress = clamped }
+                val destFile = File(ctx.cacheDir, fileName)
+                if (url == null) {
+                    // GN path
+                    var lastUpdate = 0L
+                    SteamService.fetchFileWithFallback(fileName = "drivers/$fileName", dest = destFile, context = ctx) { progress ->
+                        val now = System.currentTimeMillis()
+                        if (now - lastUpdate > 300) {
+                            lastUpdate = now
+                            scope.launch(Dispatchers.Main) { downloadProgress = progress.coerceIn(0f, 1f) }
+                        }
+                    }
+                } else {
+                    // MTR path
+                    withContext(Dispatchers.IO) {
+                        val request = Request.Builder().url(url).build()
+                        Net.http.newCall(request).execute().use { response ->
+                            if (!response.isSuccessful) throw IOException("Unexpected code $response")
+                            val body = response.body ?: throw IOException("Empty body")
+                            totalBytes = body.contentLength()
+                            val inputStream = body.byteStream()
+                            val outputStream = FileOutputStream(destFile)
+                            val buffer = ByteArray(8192)
+                            var bytesRead: Int
+                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                outputStream.write(buffer, 0, bytesRead)
+                                downloadBytes += bytesRead
+                                if (totalBytes > 0) {
+                                    downloadProgress = downloadBytes.toFloat() / totalBytes
+                                }
+                            }
+                            outputStream.flush()
+                            outputStream.close()
+                            inputStream.close()
+                        }
                     }
                 }
-                // Mark download complete before installing
-                val downloadDurationMs = System.currentTimeMillis() - overallStart
-                val downloadedSize = destFile.length()
-                Timber.d("DriverManagerDialog: Download complete in ${downloadDurationMs}ms (${formatBytes(downloadedSize)})")
-                withContext(Dispatchers.Main) { isDownloading = false; downloadProgress = 1f; downloadBytes = downloadedSize }
 
-                // Install the driver from the temporary file
-                withContext(Dispatchers.Main) { isInstalling = true }
-                Timber.d("DriverManagerDialog: Starting install")
-                val uri = Uri.fromFile(destFile)
-                val installStart = System.currentTimeMillis()
-                val res = withContext(Dispatchers.IO) { handlePickedUri(ctx, uri) }
-                val installDurationMs = System.currentTimeMillis() - installStart
+                isDownloading = false
+                isInstalling = true
+                val res = withContext(Dispatchers.IO) { handlePickedUri(ctx, Uri.fromFile(destFile)) }
                 withContext(Dispatchers.Main) {
                     lastMessage = res
                     if (res.startsWith("Installed driver:")) refreshDriverList()
                     Toast.makeText(ctx, res, Toast.LENGTH_SHORT).show()
                 }
-                Timber.d("DriverManagerDialog: Install complete in ${installDurationMs}ms")
-                Timber.d("DriverManagerDialog: Download+Install total ${(System.currentTimeMillis() - overallStart)}ms")
-
-                // Delete the temporary file
-                withContext(Dispatchers.IO) {
-                    destFile.delete()
-                }
-            } catch (e: SocketTimeoutException) {
-                val errorMessage = ctx.getString(R.string.driver_timeout)
-                lastMessage = errorMessage
-                Toast.makeText(ctx, errorMessage, Toast.LENGTH_SHORT).show()
-                Timber.e(e, "DriverManagerDialog: Download timeout")
-            } catch (e: IOException) {
-                val errorMessage = if (e.message?.contains("timeout", ignoreCase = true) == true) {
-                    ctx.getString(R.string.driver_timeout)
-                } else {
-                    ctx.getString(R.string.driver_network_error, e.message ?: "")
-                }
-                lastMessage = errorMessage
-                Toast.makeText(ctx, errorMessage, Toast.LENGTH_SHORT).show()
-                Timber.e(e, "DriverManagerDialog: Download failed with IO error")
+                destFile.delete()
             } catch (e: Exception) {
-                val errorMessage = "Error downloading driver: ${e.message}"
-                lastMessage = errorMessage
-                Toast.makeText(ctx, errorMessage, Toast.LENGTH_SHORT).show()
-                Timber.e(e, "DriverManagerDialog: Download failed")
+                Toast.makeText(ctx, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
             } finally {
                 isDownloading = false
                 isInstalling = false
-                downloadProgress = 0f
-                downloadBytes = 0L
-                totalBytes = -1L
             }
         }
     }
@@ -273,131 +277,110 @@ fun DriverManagerDialog(open: Boolean, onDismiss: () -> Unit) {
         title = { Text(text = stringResource(R.string.driver_manager), style = MaterialTheme.typography.titleLarge) },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 450.dp)
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.fillMaxWidth().heightIn(max = 450.dp).verticalScroll(rememberScrollState())
             ) {
+                // Source Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { selectedSource = DriverSource.GN },
+                        modifier = Modifier.weight(1f),
+                        colors = if (selectedSource == DriverSource.GN) androidx.compose.material3.ButtonDefaults.buttonColors() else androidx.compose.material3.ButtonDefaults.filledTonalButtonColors()
+                    ) { Text("GN") }
+                    Button(
+                        onClick = { selectedSource = DriverSource.MTR },
+                        modifier = Modifier.weight(1f),
+                        colors = if (selectedSource == DriverSource.MTR) androidx.compose.material3.ButtonDefaults.buttonColors() else androidx.compose.material3.ButtonDefaults.filledTonalButtonColors()
+                    ) { Text("MTR") }
+                }
+
                 Text(
                     text = "Import a custom graphics driver package",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
 
-                // Online driver selection
                 if (isLoadingManifest) {
-                    Row(
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    ) {
-                        Text(
-                            text = "Loading available drivers...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        CircularProgressIndicator(
-                            modifier = Modifier.height(20.dp),
-                            strokeWidth = 2.dp
-                        )
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                        Text(text = "Loading available drivers...", modifier = Modifier.weight(1f))
+                        CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
                     }
-                } else if (manifestError != null) {
-                    Text(
-                        text = manifestError ?: "Unknown error",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else if (driverManifest.isNotEmpty()) {
-                    Text(
-                        text = "Available online drivers:",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                    )
-
-                    ExposedDropdownMenuBox(
-                        expanded = isExpanded,
-                        onExpandedChange = { isExpanded = !isExpanded },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = selectedDriverKey,
-                            onValueChange = {},
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(),
-                            placeholder = { Text(stringResource(R.string.select_a_driver)) }
-                        )
-
-                        ExposedDropdownMenu(
+                } else {
+                    val currentManifest = if (selectedSource == DriverSource.GN) driverManifest else mtrDriverManifest
+                    if (currentManifest.isNotEmpty()) {
+                        Text(text = "Available online drivers (${selectedSource.name}):", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+                        ExposedDropdownMenuBox(
                             expanded = isExpanded,
-                            onDismissRequest = { isExpanded = false }
+                            onExpandedChange = { isExpanded = !isExpanded },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            driverManifest.keys.forEach { driverKey ->
-                                DropdownMenuItem(
-                                    text = { Text(driverKey) },
-                                    onClick = {
-                                        selectedDriverKey = driverKey
-                                        isExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    if (selectedDriverKey.isNotEmpty() && driverManifest.containsKey(selectedDriverKey)) {
-                        Row(
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(top = 16.dp)
-                        ) {
-                            Button(
-                                onClick = { downloadAndInstallDriver(driverManifest[selectedDriverKey]!!) },
-                                enabled = !isDownloading && !isImporting
-                            ) {
-                                Text(stringResource(R.string.download))
-                            }
-
-                            if (isDownloading) {
-                                if (totalBytes > 0) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        LinearProgressIndicator(progress = downloadProgress)
-                                        Row(
-                                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = "${formatBytes(downloadBytes)} / ${formatBytes(totalBytes)}"
-                                            )
+                            OutlinedTextField(
+                                value = selectedDriverKey,
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpanded) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                placeholder = { Text("Select a driver") }
+                            )
+                            ExposedDropdownMenu(expanded = isExpanded, onDismissRequest = { isExpanded = false }) {
+                                val keys = currentManifest.keys.toList()
+                                val sortedKeys = if (selectedSource == DriverSource.MTR) {
+                                    keys.sortedWith { a, b ->
+                                        // Simple version-aware comparator
+                                        val vA = a.substringAfter("_v", "").substringBefore("_")
+                                        val vB = b.substringAfter("_v", "").substringBefore("_")
+                                        
+                                        if (vA.isNotEmpty() && vB.isNotEmpty()) {
+                                            val partsA = vA.split('.').mapNotNull { it.toIntOrNull() }
+                                            val partsB = vB.split('.').mapNotNull { it.toIntOrNull() }
+                                            
+                                            var result = 0
+                                            val maxParts = maxOf(partsA.size, partsB.size)
+                                            for (i in 0 until maxParts) {
+                                                val pA = partsA.getOrElse(i) { 0 }
+                                                val pB = partsB.getOrElse(i) { 0 }
+                                                if (pA != pB) {
+                                                    result = pB.compareTo(pA) // Descending
+                                                    break
+                                                }
+                                            }
+                                            if (result != 0) result else b.compareTo(a)
+                                        } else {
+                                            b.compareTo(a) // Fallback to descending string sort
                                         }
                                     }
                                 } else {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        LinearProgressIndicator() // indeterminate when total unknown
-                                        Row(
-                                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(top = 4.dp)
-                                        ) {
-                                            Text(text = stringResource(R.string.downloading))
+                                    keys.sorted()
+                                }
+
+                                sortedKeys.forEach { driverKey ->
+                                    DropdownMenuItem(
+                                        text = { Text(driverKey) },
+                                        onClick = {
+                                            selectedDriverKey = driverKey
+                                            isExpanded = false
                                         }
-                                    }
+                                    )
                                 }
                             }
-                            if (isInstalling) {
-                                Row(
-                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.height(24.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                    Text(text = stringResource(R.string.installing))
+                        }
+
+                        if (selectedDriverKey.isNotEmpty()) {
+                            Row(modifier = Modifier.padding(top = 16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        if (selectedSource == DriverSource.GN) downloadAndInstall(currentManifest[selectedDriverKey]!!, null)
+                                        else downloadAndInstall(selectedDriverKey, currentManifest[selectedDriverKey])
+                                    },
+                                    enabled = !isDownloading && !isImporting
+                                ) { Text(stringResource(R.string.download)) }
+                                if (isDownloading) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        LinearProgressIndicator(progress = downloadProgress)
+                                        Text(text = if (totalBytes > 0) "${formatBytes(downloadBytes)} / ${formatBytes(totalBytes)}" else "Downloading...")
+                                    }
                                 }
                             }
                         }
@@ -562,4 +545,3 @@ private fun Preview_DriverManagerDialog() {
         }
     }
 }
-

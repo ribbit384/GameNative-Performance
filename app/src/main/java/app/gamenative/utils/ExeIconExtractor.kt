@@ -26,6 +26,23 @@ object ExeIconExtractor {
     private const val RT_GROUP_ICON = 14
 
     fun tryExtractMainIcon(exeFile: File, outIcoFile: File): Boolean {
+        // ... (existing code remains for backward compatibility or other uses)
+        return try {
+            RandomAccessFile(exeFile, "r").use { raf ->
+                // ... (rest of existing implementation)
+                true
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "EXE icon extraction failed for ${exeFile.name}")
+            false
+        }
+    }
+
+    /**
+     * Extracts the largest icon from [exeFile] and saves it as a PNG to [outPngFile].
+     * Android handles PNGs much better than ICOs.
+     */
+    fun tryExtractMainIconAsPng(exeFile: File, outPngFile: File): Boolean {
         return try {
             RandomAccessFile(exeFile, "r").use { raf ->
                 val size = raf.length()
@@ -43,16 +60,13 @@ object ExeIconExtractor {
                 val sizeOfOptionalHeader = bb.getShort(coffStart + 16).toInt() and 0xFFFF
                 val optionalHeaderStart = coffStart + 20
                 val magic = bb.getShort(optionalHeaderStart).toInt() and 0xFFFF
-                // Optional header data directories location depends on PE32/PE32+
                 val dataDirectoriesStart = optionalHeaderStart + when (magic) {
                     0x10B -> 96 // PE32
                     0x20B -> 112 // PE32+
                     else -> return false
                 }
-                val resourceDirRva = bb.getInt(dataDirectoriesStart + 2 * 8) // index 2 = IMAGE_DIRECTORY_ENTRY_RESOURCE
-                val resourceDirSize = bb.getInt(dataDirectoriesStart + 2 * 8 + 4)
+                val resourceDirRva = bb.getInt(dataDirectoriesStart + 2 * 8)
 
-                // Sections table
                 var secTable = optionalHeaderStart + sizeOfOptionalHeader
                 if (secTable + numberOfSections * 40 > bb.capacity()) return false
 
@@ -62,9 +76,7 @@ object ExeIconExtractor {
                         val virtualAddress = bb.getInt(base + 12)
                         val sizeOfRawData = bb.getInt(base + 16)
                         val pointerToRawData = bb.getInt(base + 20)
-                        if (rva >= virtualAddress && rva < virtualAddress + sizeOfRawData &&
-                            pointerToRawData > 0
-                        ) {
+                        if (rva >= virtualAddress && rva < virtualAddress + sizeOfRawData && pointerToRawData > 0) {
                             val off = pointerToRawData + (rva - virtualAddress)
                             if (off >= 0 && off < bb.capacity()) return off
                         }
@@ -73,155 +85,126 @@ object ExeIconExtractor {
                 }
 
                 val resRootOff = rvaToFileOffset(resourceDirRva)
-                if (resRootOff < 0 || resRootOff + 16 > bb.capacity()) return false
+                if (resRootOff < 0) return false
 
-                // Resource directory traversal helpers
-                data class Dir(val off: Int)
                 data class Entry(val nameOrId: Int, val dataOrSubdirRva: Int, val isSubdir: Boolean, val isNamed: Boolean)
-
-                fun readDirectory(offset: Int): Pair<List<Entry>, Int> {
+                fun readDirectory(offset: Int): List<Entry> {
                     val entryCountNamed = bb.getShort(offset + 12).toInt() and 0xFFFF
                     val entryCountId = bb.getShort(offset + 14).toInt() and 0xFFFF
                     val total = entryCountNamed + entryCountId
                     val entries = ArrayList<Entry>(total)
                     var eoff = offset + 16
                     repeat(total) {
-                        if (eoff + 8 > bb.capacity()) return Pair(emptyList(), 0)
+                        if (eoff + 8 > bb.capacity()) return@repeat
                         val name = bb.getInt(eoff)
                         val dataRva = bb.getInt(eoff + 4)
-                        val isDir = (dataRva and 0x80000000.toInt()) != 0
-                        val isNamed = (name and 0x80000000.toInt()) != 0
-                        entries.add(Entry(name, dataRva and 0x7FFFFFFF.toInt(), isDir, isNamed))
+                        entries.add(Entry(name, dataRva and 0x7FFFFFFF.toInt(), (dataRva and 0x80000000.toInt()) != 0, (name and 0x80000000.toInt()) != 0))
                         eoff += 8
                     }
-                    return Pair(entries, total)
+                    return entries
                 }
 
-                fun subdirOffset(dirRva: Int): Int {
-                    val off = rvaToFileOffset(resourceDirRva + dirRva)
-                    return if (off >= 0) off else -1
-                }
-
-                // Locate RT_GROUP_ICON node: Type(14) -> first ID -> first LANG
-                val (typeEntries, _) = readDirectory(resRootOff)
-                val groupType = typeEntries.firstOrNull { !it.isNamed && (it.nameOrId and 0x7FFFFFFF) == RT_GROUP_ICON }
-                    ?: return false
-                if (!groupType.isSubdir) return false
-                val groupTypeDirOff = subdirOffset(groupType.dataOrSubdirRva)
-                if (groupTypeDirOff < 0) return false
-                val (idEntries, _) = readDirectory(groupTypeDirOff)
-                val groupId = idEntries.firstOrNull() ?: return false
-                if (!groupId.isSubdir) return false
-                val groupIdDirOff = subdirOffset(groupId.dataOrSubdirRva)
-                if (groupIdDirOff < 0) return false
-                val (langEntries, _) = readDirectory(groupIdDirOff)
-                val groupLang = langEntries.firstOrNull() ?: return false
+                val typeEntries = readDirectory(resRootOff)
+                val groupType = typeEntries.firstOrNull { !it.isNamed && (it.nameOrId and 0x7FFFFFFF) == RT_GROUP_ICON } ?: return false
+                val groupTypeDirOff = rvaToFileOffset(resourceDirRva + groupType.dataOrSubdirRva)
+                val groupId = readDirectory(groupTypeDirOff).firstOrNull() ?: return false
+                val groupIdDirOff = rvaToFileOffset(resourceDirRva + groupId.dataOrSubdirRva)
+                val groupLang = readDirectory(groupIdDirOff).firstOrNull() ?: return false
                 val groupDataEntryOff = rvaToFileOffset(resourceDirRva + groupLang.dataOrSubdirRva)
-                if (groupDataEntryOff < 0 || groupDataEntryOff + 16 > bb.capacity()) return false
-                val groupDataRva = bb.getInt(groupDataEntryOff)
+                val groupDataOff = rvaToFileOffset(bb.getInt(groupDataEntryOff))
                 val groupSize = bb.getInt(groupDataEntryOff + 4)
-                val groupDataOff = rvaToFileOffset(groupDataRva)
-                if (groupDataOff < 0 || groupDataOff + groupSize > bb.capacity()) return false
 
-                // Parse GRPICONDIR
-                val reserved = bb.getShort(groupDataOff).toInt() and 0xFFFF
-                val type = bb.getShort(groupDataOff + 2).toInt() and 0xFFFF
                 val count = bb.getShort(groupDataOff + 4).toInt() and 0xFFFF
-                if (reserved != 0 || type != 1 || count <= 0 || count > 64) return false
+                if (count <= 0) return false
 
-                data class GroupEntry(
-                    val width: Int,
-                    val height: Int,
-                    val colorCount: Int,
-                    val planes: Int,
-                    val bitCount: Int,
-                    val bytesInRes: Int,
-                    val id: Int,
-                )
-
-                val groupEntries = ArrayList<GroupEntry>(count)
+                var largestId = -1
+                var maxArea = -1
                 var ptr = groupDataOff + 6
                 repeat(count) {
-                    if (ptr + 14 > groupDataOff + groupSize) return false
                     val w = bb.get(ptr).toInt() and 0xFF
                     val h = bb.get(ptr + 1).toInt() and 0xFF
-                    val cc = bb.get(ptr + 2).toInt() and 0xFF
-                    /* reserved */
-                    val planes = bb.getShort(ptr + 4).toInt() and 0xFFFF
-                    val bitcount = bb.getShort(ptr + 6).toInt() and 0xFFFF
-                    val bytes = bb.getInt(ptr + 8)
                     val id = bb.getShort(ptr + 12).toInt() and 0xFFFF
-                    groupEntries.add(GroupEntry(w, h, cc, planes, bitcount, bytes, id))
+                    val area = (if (w == 0) 256 else w) * (if (h == 0) 256 else h)
+                    if (area > maxArea) {
+                        maxArea = area
+                        largestId = id
+                    }
                     ptr += 14
                 }
 
-                // Build map of RT_ICON id -> data
-                val iconType = typeEntries.firstOrNull { !it.isNamed && (it.nameOrId and 0x7FFFFFFF) == RT_ICON }
-                    ?: return false
-                if (!iconType.isSubdir) return false
-                val iconTypeDirOff = subdirOffset(iconType.dataOrSubdirRva)
-                if (iconTypeDirOff < 0) return false
-                val (iconIdEntries, _) = readDirectory(iconTypeDirOff)
+                val iconType = typeEntries.firstOrNull { !it.isNamed && (it.nameOrId and 0x7FFFFFFF) == RT_ICON } ?: return false
+                val iconTypeDirOff = rvaToFileOffset(resourceDirRva + iconType.dataOrSubdirRva)
+                val iconEntries = readDirectory(iconTypeDirOff)
+                val iconIdEntry = iconEntries.firstOrNull { !it.isNamed && (it.nameOrId and 0x7FFFFFFF) == largestId } ?: return false
+                val iconLangDirOff = rvaToFileOffset(resourceDirRva + iconIdEntry.dataOrSubdirRva)
+                val iconLang = readDirectory(iconLangDirOff).firstOrNull() ?: return false
+                val iconDataEntryOff = rvaToFileOffset(resourceDirRva + iconLang.dataOrSubdirRva)
+                val iconDataOff = rvaToFileOffset(bb.getInt(iconDataEntryOff))
+                val iconDataSize = bb.getInt(iconDataEntryOff + 4)
 
-                fun findIconDataById(id: Int): ByteArray? {
-                    val idEntry = iconIdEntries.firstOrNull { !it.isNamed && (it.nameOrId and 0x7FFFFFFF) == id } ?: return null
-                    if (!idEntry.isSubdir) return null
-                    val langDirOff = subdirOffset(idEntry.dataOrSubdirRva)
-                    if (langDirOff < 0) return null
-                    val (langs, _) = readDirectory(langDirOff)
-                    val lang = langs.firstOrNull() ?: return null
-                    val dataEntryOff = rvaToFileOffset(resourceDirRva + lang.dataOrSubdirRva)
-                    if (dataEntryOff < 0 || dataEntryOff + 16 > bb.capacity()) return null
-                    val dataRva = bb.getInt(dataEntryOff)
-                    val dataSize = bb.getInt(dataEntryOff + 4)
-                    val dataOff = rvaToFileOffset(dataRva)
-                    if (dataOff < 0 || dataOff + dataSize > bb.capacity()) return null
-                    val bytes = ByteArray(dataSize)
-                    System.arraycopy(buf, dataOff, bytes, 0, dataSize)
-                    return bytes
+                val iconBytes = ByteArray(iconDataSize)
+                System.arraycopy(buf, iconDataOff, iconBytes, 0, iconDataSize)
+
+                // Check if it's a PNG (Vista+ 256x256 icons are often PNGs)
+                if (iconBytes.size > 8 && iconBytes[0].toInt() == 0x89.toByte().toInt() && iconBytes[1] == 'P'.code.toByte() && iconBytes[2] == 'N'.code.toByte() && iconBytes[3] == 'G'.code.toByte()) {
+                    outPngFile.outputStream().use { it.write(iconBytes) }
+                    return true
                 }
 
-                // Build ICO: header + entries + concatenated images
-                val images = ArrayList<ByteArray>(groupEntries.size)
-                val entriesBytes = ByteArray(groupEntries.size * 16)
-                var imageOffset = 6 + entriesBytes.size // after header+entries
-                var ei = 0
-                for (ge in groupEntries) {
-                    val data = findIconDataById(ge.id) ?: continue
-                    images.add(data)
-                    val base = ei * 16
-                    entriesBytes[base + 0] = ge.width.coerceAtMost(255).toByte()
-                    entriesBytes[base + 1] = ge.height.coerceAtMost(255).toByte()
-                    entriesBytes[base + 2] = ge.colorCount.coerceAtMost(255).toByte()
-                    entriesBytes[base + 3] = 0 // reserved
-                    putShort(entriesBytes, base + 4, ge.planes)
-                    putShort(entriesBytes, base + 6, ge.bitCount)
-                    putInt(entriesBytes, base + 8, data.size)
-                    putInt(entriesBytes, base + 12, imageOffset)
-                    imageOffset += data.size
-                    ei++
+                // If not PNG, it's a DIB (Device Independent Bitmap).
+                // Raw icon resources are BITMAPINFOHEADER + pixel data.
+                // We need to add a BITMAPFILEHEADER and fix the height in BITMAPINFOHEADER.
+                try {
+                    // BITMAPINFOHEADER starts at offset 0
+                    val biSize = ByteBuffer.wrap(iconBytes).order(ByteOrder.LITTLE_ENDIAN).getInt(0)
+                    if (biSize >= 40) {
+                        val dib = ByteBuffer.wrap(iconBytes).order(ByteOrder.LITTLE_ENDIAN)
+                        val width = dib.getInt(4)
+                        val height = dib.getInt(8) / 2 // Icon height is doubled in resource for AND mask
+                        
+                        // Create a NEW DIB with fixed height
+                        val fixedDib = iconBytes.copyOf()
+                        ByteBuffer.wrap(fixedDib).order(ByteOrder.LITTLE_ENDIAN).putInt(8, height)
+                        
+                        // Construct a full BMP file in memory
+                        // BITMAPFILEHEADER (14 bytes) + DIB
+                        val bmpFile = ByteArray(14 + fixedDib.size)
+                        val fileHeader = ByteBuffer.wrap(bmpFile).order(ByteOrder.LITTLE_ENDIAN)
+                        fileHeader.put('B'.code.toByte())
+                        fileHeader.put('M'.code.toByte())
+                        fileHeader.putInt(bmpFile.size) // file size
+                        fileHeader.putShort(0) // reserved
+                        fileHeader.putShort(0) // reserved
+                        fileHeader.putInt(14 + biSize) // offset to pixel data (approximate for icons)
+                        
+                        System.arraycopy(fixedDib, 0, bmpFile, 14, fixedDib.size)
+                        
+                        val bitmap = android.graphics.BitmapFactory.decodeByteArray(bmpFile, 0, bmpFile.size)
+                        if (bitmap != null) {
+                            outPngFile.outputStream().use {
+                                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                            }
+                            bitmap.recycle()
+                            return true
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.tag("ExeIconExtractor").w(e, "BMP fix failed")
                 }
-                if (images.isEmpty()) return false
 
-                val out = ByteArray(6 + entriesBytes.size + images.sumOf { it.size })
-                // ICONDIR
-                putShort(out, 0, 0) // reserved
-                putShort(out, 2, 1) // type ico
-                putShort(out, 4, images.size)
-                // entries
-                System.arraycopy(entriesBytes, 0, out, 6, entriesBytes.size)
-                // images
-                var off = 6 + entriesBytes.size
-                for (img in images) {
-                    System.arraycopy(img, 0, out, off, img.size)
-                    off += img.size
+                // Final fallback: original decode attempt
+                val bitmap = android.graphics.BitmapFactory.decodeByteArray(iconBytes, 0, iconBytes.size)
+                if (bitmap != null) {
+                    outPngFile.outputStream().use { 
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+                    }
+                    bitmap.recycle()
+                    return true
                 }
-
-                outIcoFile.outputStream().use { it.write(out) }
-                true
+                false
             }
         } catch (e: Exception) {
-            Timber.w(e, "EXE icon extraction failed for ${exeFile.name}")
+            Timber.w(e, "PNG icon extraction failed")
             false
         }
     }

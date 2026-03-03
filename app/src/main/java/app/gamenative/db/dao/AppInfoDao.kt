@@ -26,6 +26,9 @@ interface AppInfoDao {
     @Query("SELECT * FROM app_info WHERE id = :appId")
     suspend fun get(appId: Int): AppInfo?
 
+    @Query("SELECT id FROM app_info WHERE is_downloaded = 1")
+    suspend fun getAllInstalledAppIds(): List<Int>
+
     @Query("DELETE from app_info WHERE id = :appId")
     suspend fun deleteApp(appId: Int)
 

@@ -229,6 +229,8 @@ public class ContainerManager {
         dstContainer.setDesktopTheme(srcContainer.getDesktopTheme());
         dstContainer.setRcfileId(srcContainer.getRCFileId());
         dstContainer.setWineVersion(srcContainer.getWineVersion());
+        dstContainer.setForceAdrenoClocks(srcContainer.isForceAdrenoClocks());
+        dstContainer.setRootPerformanceMode(srcContainer.isRootPerformanceMode());
         dstContainer.saveData();
 
         containers.add(dstContainer);

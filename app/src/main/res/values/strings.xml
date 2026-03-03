@@ -198,6 +198,7 @@
     <string name="dpad_right">D-Pad Right</string>
     <string name="input_controls">On-screen Controller</string>
     <string name="edit_controls">Edit On-screen Controller</string>
+    <string name="stretch_to_fullscreen">Stretch To Fullscreen</string>
     <string name="edit_physical_controller">Edit Physical Controller</string>
     <string name="controller_disconnected">Disconnected</string>
     <string name="reset_onscreen_controls">Reset On-Screen Controls</string>
@@ -1009,6 +1010,19 @@
     <string name="epic_logout_success">Logged out from Epic Games successfully</string>
     <string name="epic_logout_failed">Failed to logout: %s</string>
     <string name="epic_logout_in_progress">Logging out from Epic Games…</string>
+
+    <!-- Steam Settings Integration -->
+    <string name="steam_integration_title">Steam</string>
+    <string name="steam_settings_login_title">Sign in</string>
+    <string name="steam_settings_login_subtitle">Sign in to your Steam account</string>
+    <string name="steam_settings_logout_title">Logout</string>
+    <string name="steam_settings_logout_subtitle">Sign out from your Steam account</string>
+    <string name="steam_logout_confirm_title">Logout from Steam?</string>
+    <string name="steam_logout_confirm_message">This will remove your Steam credentials and clear your Steam library from this device. You can sign in again at any time.</string>
+    <string name="steam_logout_confirm">Logout</string>
+    <string name="steam_logout_success">Logged out from Steam successfully</string>
+    <string name="steam_logout_failed">Failed to logout: %s</string>
+    <string name="steam_logout_in_progress">Logging out from Steam…</string>
 
     <string name="manifest_downloading_item">Downloading %1$s...</string>
     <string name="manifest_download_failed">Download failed: %1$s</string>

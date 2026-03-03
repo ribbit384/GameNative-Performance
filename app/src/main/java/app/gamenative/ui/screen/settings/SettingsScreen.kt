@@ -36,6 +36,7 @@ fun SettingsScreen(
     onAppTheme: (AppTheme) -> Unit,
     onPaletteStyle: (PaletteStyle) -> Unit,
     onBack: () -> Unit,
+    onNavigateToSteamLogin: () -> Unit = {},
 ) {
     SettingsScreenContent(
         appTheme = appTheme,
@@ -43,6 +44,7 @@ fun SettingsScreen(
         onAppTheme = onAppTheme,
         onPaletteStyle = onPaletteStyle,
         onBack = onBack,
+        onNavigateToSteamLogin = onNavigateToSteamLogin,
     )
 }
 
@@ -54,6 +56,7 @@ private fun SettingsScreenContent(
     onAppTheme: (AppTheme) -> Unit,
     onPaletteStyle: (PaletteStyle) -> Unit,
     onBack: () -> Unit,
+    onNavigateToSteamLogin: () -> Unit = {},
 ) {
     val snackBarHostState = remember { SnackbarHostState() }
     val scrollState = rememberScrollState()
@@ -82,6 +85,7 @@ private fun SettingsScreenContent(
                 paletteStyle = paletteStyle,
                 onAppTheme = onAppTheme,
                 onPaletteStyle = onPaletteStyle,
+                onNavigateToSteamLogin = onNavigateToSteamLogin,
             )
             SettingsGroupInfo()
             SettingsGroupDebug()
@@ -101,6 +105,7 @@ private fun Preview_SettingsScreen() {
             onAppTheme = { },
             onPaletteStyle = { },
             onBack = { },
+            onNavigateToSteamLogin = { },
         )
     }
 }

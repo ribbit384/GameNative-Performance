@@ -33,7 +33,7 @@ public class Container {
     public static final String EXTERNAL_DISPLAY_MODE_HYBRID = "hybrid";
     public static final String DEFAULT_EXTERNAL_DISPLAY_MODE = EXTERNAL_DISPLAY_MODE_OFF;
 
-    public static final String DEFAULT_ENV_VARS = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=1 MESA_VK_WSI_PRESENT_MODE=mailbox TU_DEBUG=noconform DXVK_FRAME_RATE=60 PULSE_LATENCY_MSEC=144";
+    public static final String DEFAULT_ENV_VARS = "WRAPPER_MAX_IMAGE_COUNT=0 ZINK_DESCRIPTORS=lazy ZINK_DEBUG=compact MESA_SHADER_CACHE_DISABLE=false MESA_SHADER_CACHE_MAX_SIZE=512MB mesa_glthread=true WINEESYNC=1 MESA_VK_WSI_PRESENT_MODE=mailbox TU_DEBUG=noconform,sysmem PULSE_LATENCY_MSEC=144";
     public static final String DEFAULT_SCREEN_SIZE = "1280x720";
     public static final String DEFAULT_GRAPHICS_DRIVER = DefaultVersion.DEFAULT_GRAPHICS_DRIVER;
     public static final String DEFAULT_AUDIO_DRIVER = "pulseaudio";
@@ -137,6 +137,25 @@ public class Container {
     private boolean unpackFiles = false;
 
     private String containerVariant = DEFAULT_VARIANT;
+
+    private boolean forceAdrenoClocks = false;
+    private boolean rootPerformanceMode = false;
+
+    public boolean isForceAdrenoClocks() {
+        return forceAdrenoClocks;
+    }
+
+    public void setForceAdrenoClocks(boolean forceAdrenoClocks) {
+        this.forceAdrenoClocks = forceAdrenoClocks;
+    }
+
+    public boolean isRootPerformanceMode() {
+        return rootPerformanceMode;
+    }
+
+    public void setRootPerformanceMode(boolean rootPerformanceMode) {
+        this.rootPerformanceMode = rootPerformanceMode;
+    }
 
     public String getGraphicsDriverVersion() {
         return graphicsDriverVersion;
@@ -678,6 +697,9 @@ public class Container {
             // Unpack Files setting
             data.put("unpackFiles", unpackFiles);
 
+            data.put("forceAdrenoClocks", forceAdrenoClocks);
+            data.put("rootPerformanceMode", rootPerformanceMode);
+
             if (!WineInfo.isMainWineVersion(wineVersion)) data.put("wineVersion", wineVersion);
             FileUtils.writeString(getConfigFile(), data.toString());
         }
@@ -857,6 +879,12 @@ public class Container {
                     break;
                 case "unpackFiles":
                     this.unpackFiles = data.getBoolean(key);
+                    break;
+                case "forceAdrenoClocks":
+                    this.forceAdrenoClocks = data.getBoolean(key);
+                    break;
+                case "rootPerformanceMode":
+                    this.rootPerformanceMode = data.getBoolean(key);
                     break;
             }
         }

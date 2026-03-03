@@ -51,14 +51,14 @@ public abstract class Box86_64PresetManager {
                 envVars.put("BOX64_MMAP32", "0");
             }
         } else if (id.equals(Box86_64Preset.INTERMEDIATE)) {
-            envVars.put(ucPrefix + "_DYNAREC_SAFEFLAGS", "2");
+            envVars.put(ucPrefix + "_DYNAREC_SAFEFLAGS", "1");
             envVars.put(ucPrefix + "_DYNAREC_FASTNAN", "1");
             envVars.put(ucPrefix + "_DYNAREC_FASTROUND", "0");
             envVars.put(ucPrefix + "_DYNAREC_X87DOUBLE", "1");
-            envVars.put(ucPrefix + "_DYNAREC_BIGBLOCK", "1");
+            envVars.put(ucPrefix + "_DYNAREC_BIGBLOCK", "2");
             envVars.put(ucPrefix + "_DYNAREC_STRONGMEM", "0");
-            envVars.put(ucPrefix + "_DYNAREC_FORWARD", "128");
-            envVars.put(ucPrefix + "_DYNAREC_CALLRET", "0");
+            envVars.put(ucPrefix + "_DYNAREC_FORWARD", "512");
+            envVars.put(ucPrefix + "_DYNAREC_CALLRET", "1");
             envVars.put(ucPrefix + "_DYNAREC_WAIT", "1");
             if (ucPrefix.equals("BOX64")) {
                 envVars.put("BOX64_AVX", "0");

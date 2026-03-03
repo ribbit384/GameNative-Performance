@@ -23,6 +23,8 @@ import app.gamenative.ui.data.AppMenuOption
 import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.enums.AppOptionMenuType
 import com.winlator.container.ContainerData
+import app.gamenative.ui.component.picker.rememberDownloadFolderPicker
+import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -257,13 +259,24 @@ class GOGAppScreen : BaseAppScreen() {
         }
     }
 
-    private fun performDownload(context: Context, libraryItem: LibraryItem, onClickPlay: (Boolean) -> Unit) {
+    private fun performDownload(context: Context, libraryItem: LibraryItem, onClickPlay: (Boolean) -> Unit, customInstallPath: String? = null) {
         val gameId = libraryItem.gameId.toString()
         Timber.i("Starting GOG game download: ${libraryItem.appId}")
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 // Get install path
-                val installPath = GOGConstants.getGameInstallPath(libraryItem.name)
+                var installPath = GOGConstants.getGameInstallPath(libraryItem.name)
+                
+                if (customInstallPath != null) {
+                    // Create a subfolder using the sanitized game name
+                    var folderName = libraryItem.name.replace(Regex("[^a-zA-Z0-9.-]"), "_")
+                    // Safety fallback: if folderName ended up empty, use appId
+                    if (folderName.isBlank()) {
+                        folderName = libraryItem.appId.replace(Regex("[^a-zA-Z0-9.-]"), "_")
+                    }
+                    installPath = File(customInstallPath, folderName).absolutePath
+                }
+                
                 Timber.d("Downloading GOG game to: $installPath")
 
                 // Show starting download toast
@@ -562,6 +575,15 @@ class GOGAppScreen : BaseAppScreen() {
                 }
         }
 
+        val downloadPicker = rememberDownloadFolderPicker(
+            onPathSelected = { path ->
+                performDownload(context, libraryItem, {}, path)
+            },
+            onFailure = {
+                android.widget.Toast.makeText(context, "Failed to select folder", android.widget.Toast.LENGTH_SHORT).show()
+            },
+        )
+
         // Show install dialog if visible
         if (installDialogState.visible) {
             val onDismissRequest: (() -> Unit)? = {
@@ -574,7 +596,7 @@ class GOGAppScreen : BaseAppScreen() {
                 app.gamenative.ui.enums.DialogType.INSTALL_APP -> {
                     {
                         BaseAppScreen.hideInstallDialog(appId)
-                        performDownload(context, libraryItem) {}
+                        downloadPicker.launchPicker()
                     }
                 }
                 else -> null

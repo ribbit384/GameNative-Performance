@@ -70,6 +70,7 @@ import kotlinx.coroutines.launch
 import app.gamenative.utils.LocaleHelper
 import app.gamenative.service.gog.GOGService
 import app.gamenative.service.epic.EpicService
+import app.gamenative.service.SteamService
 import app.gamenative.service.epic.EpicAuthManager
 import android.content.Context
 import android.content.Intent
@@ -191,6 +192,7 @@ fun SettingsGroupInterface(
     paletteStyle: PaletteStyle,
     onAppTheme: (AppTheme) -> Unit,
     onPaletteStyle: (PaletteStyle) -> Unit,
+    onNavigateToSteamLogin: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -443,6 +445,37 @@ fun SettingsGroupInterface(
                     },
                 )
             }
+        }
+    }
+
+    // Steam logout confirmation dialog state
+    var showSteamLogoutDialog by rememberSaveable { mutableStateOf(false) }
+    var steamLogoutLoading by rememberSaveable { mutableStateOf(false) }
+
+    // Steam Integration
+    SettingsGroup(title = { Text(text = stringResource(R.string.steam_integration_title)) }) {
+        if (!SteamService.isLoggedIn) {
+            SettingsMenuLink(
+                icon = { androidx.compose.material3.Icon(Icons.Default.Login, contentDescription = null) },
+                colors = settingsTileColorsAlt(),
+                title = { Text(text = stringResource(R.string.steam_settings_login_title)) },
+                subtitle = { Text(text = stringResource(R.string.steam_settings_login_subtitle)) },
+                onClick = {
+                    onNavigateToSteamLogin()
+                }
+            )
+        }
+        // Logout button - only show if logged in
+        if (SteamService.isLoggedIn) {
+            SettingsMenuLink(
+                icon = { androidx.compose.material3.Icon(Icons.Default.Logout, contentDescription = null) },
+                colors = settingsTileColorsAlt(),
+                title = { Text(text = stringResource(R.string.steam_settings_logout_title)) },
+                subtitle = { Text(text = stringResource(R.string.steam_settings_logout_subtitle)) },
+                onClick = {
+                    showSteamLogoutDialog = true
+                }
+            )
         }
     }
 
@@ -907,6 +940,53 @@ fun SettingsGroupInterface(
         message = stringResource(R.string.epic_logout_in_progress)
     )
 
+    // Steam logout confirmation dialog
+    MessageDialog(
+        visible = showSteamLogoutDialog,
+        title = stringResource(R.string.steam_logout_confirm_title),
+        message = stringResource(R.string.steam_logout_confirm_message),
+        confirmBtnText = stringResource(R.string.steam_logout_confirm),
+        dismissBtnText = stringResource(R.string.cancel),
+        onConfirmClick = {
+            showSteamLogoutDialog = false
+            steamLogoutLoading = true
+            coroutineScope.launch {
+                try {
+                    Timber.d("[SettingsSteam]: Starting logout...")
+                    SteamService.logOut()
+                    withContext(Dispatchers.Main) {
+                        steamLogoutLoading = false
+                        Timber.i("[SettingsSteam]: ✓ Logout successful!")
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.steam_logout_success),
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "[SettingsSteam]: Logout exception: ${e.message}")
+                    withContext(Dispatchers.Main) {
+                        steamLogoutLoading = false
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.steam_logout_failed, e.message ?: "Unknown"),
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        },
+        onDismissRequest = { showSteamLogoutDialog = false },
+        onDismissClick = { showSteamLogoutDialog = false }
+    )
+
+    // Steam logout loading dialog
+    LoadingDialog(
+        visible = steamLogoutLoading,
+        progress = -1f,
+        message = stringResource(R.string.steam_logout_in_progress)
+    )
+
 }
 
 
@@ -960,6 +1040,7 @@ private fun Preview_SettingsScreen() {
             paletteStyle = PaletteStyle.TonalSpot,
             onAppTheme = { },
             onPaletteStyle = { },
+            onNavigateToSteamLogin = { },
         )
     }
 }

@@ -35,6 +35,7 @@ import java.io.File
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import app.gamenative.ui.component.dialog.WineDebugChannelsDialog
+import app.gamenative.ui.component.dialog.FileExplorerDialog
 
 @Suppress("UnnecessaryOptInAnnotation") // ExperimentalFoundationApi
 @OptIn(ExperimentalCoilApi::class, ExperimentalFoundationApi::class)
@@ -44,6 +45,14 @@ fun SettingsGroupDebug() {
     // initialize preference managers
     PrefManager.init(context)
     WinlatorPrefManager.init(context)
+
+    var showFileExplorer by rememberSaveable { mutableStateOf(false) }
+
+    if (showFileExplorer) {
+        FileExplorerDialog(
+            onDismiss = { showFileExplorer = false }
+        )
+    }
 
     // Load Wine debug channels and prepare selection state
     var allWineChannels by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -156,6 +165,12 @@ fun SettingsGroupDebug() {
     }
 
     SettingsGroup(title = { Text(text = stringResource(R.string.settings_debug_title)) }) {
+        SettingsMenuLink(
+            colors = settingsTileColors(),
+            title = { Text(text = "Embedded File Access") },
+            subtitle = { Text(text = "Explore internal app files and container data") },
+            onClick = { showFileExplorer = true },
+        )
         SettingsMenuLink(
             colors = settingsTileColors(),
             title = { Text(text = stringResource(R.string.settings_save_logcat_title)) },

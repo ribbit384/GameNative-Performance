@@ -168,11 +168,13 @@ internal fun AppItem(
                     .clip(RoundedCornerShape(12.dp)),
             ) {
                 if (paneType == PaneType.LIST) {
-                    val iconUrl = remember(appInfo.appId) {
+                    val iconUrl = remember(appInfo.appId, imageRefreshCounter) {
                         if (appInfo.gameSource == GameSource.CUSTOM_GAME) {
                             val path = CustomGameScanner.findIconFileForCustomGame(context, appInfo.appId)
                             if (!path.isNullOrEmpty()) {
-                                if (path.startsWith("file://")) path else "file://$path"
+                                val file = File(path)
+                                val ts = if (file.exists()) file.lastModified() else 0L
+                                "file://$path?t=$ts"
                             } else {
                                 appInfo.clientIconUrl
                             }
@@ -220,6 +222,11 @@ internal fun AppItem(
                                     PaneType.GRID_CAPSULE -> {
                                         // Vertical grid for capsule
                                         findSteamGridDBImage("grid_capsule")
+                                            ?: CustomGameScanner.findIconFileForCustomGame(context, appInfo.appId)?.let {
+                                                val file = File(it)
+                                                val ts = if (file.exists()) file.lastModified() else 0L
+                                                "file://$it?t=$ts"
+                                            }
                                             ?: "https://shared.steamstatic.com/store_item_assets/steam/apps/" + appInfo.gameId +
                                             "/library_600x900.jpg"
                                     }
@@ -227,6 +234,11 @@ internal fun AppItem(
                                     PaneType.GRID_HERO -> {
                                         // Horizontal grid for hero view
                                         findSteamGridDBImage("grid_hero")
+                                            ?: CustomGameScanner.findIconFileForCustomGame(context, appInfo.appId)?.let {
+                                                val file = File(it)
+                                                val ts = if (file.exists()) file.lastModified() else 0L
+                                                "file://$it?t=$ts"
+                                            }
                                             ?: "https://shared.steamstatic.com/store_item_assets/steam/apps/" + appInfo.gameId +
                                             "/header.jpg"
                                     }
@@ -248,6 +260,11 @@ internal fun AppItem(
                                             heroFile?.let { android.net.Uri.fromFile(it).toString() }
                                         }
                                         heroUrl
+                                            ?: CustomGameScanner.findIconFileForCustomGame(context, appInfo.appId)?.let {
+                                                val file = File(it)
+                                                val ts = if (file.exists()) file.lastModified() else 0L
+                                                "file://$it?t=$ts"
+                                            }
                                             ?: "https://shared.steamstatic.com/store_item_assets/steam/apps/" + appInfo.gameId +
                                             "/header.jpg"
                                     }

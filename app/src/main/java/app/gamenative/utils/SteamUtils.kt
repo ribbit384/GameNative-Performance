@@ -746,13 +746,8 @@ object SteamUtils {
                     val originalPath = path.parent.resolve(dllName)
                     Timber.i("Found ${path.name} at ${path.absolutePathString()}, restoring...")
 
-                    // Delete the current DLL if it exists
-                    if (Files.exists(originalPath)) {
-                        Files.delete(originalPath)
-                    }
-
-                    // Copy the backup back to the original location
-                    Files.copy(path, originalPath)
+                    // Copy the backup back to the original location, overwriting if exists
+                    Files.copy(path, originalPath, StandardCopyOption.REPLACE_EXISTING)
 
                     Timber.i("Restored $dllName from backup")
                 } catch (e: IOException) {
@@ -783,13 +778,8 @@ object SteamUtils {
                     val originalPath = origPath.parent.resolve(origPath.name.removeSuffix(".original.exe"))
                     Timber.i("Found ${origPath.name} at ${origPath.absolutePathString()}, restoring...")
 
-                    // Delete the current exe if it exists
-                    if (Files.exists(originalPath)) {
-                        Files.delete(originalPath)
-                    }
-
-                    // Copy the backup back to the original location
-                    Files.copy(origPath, originalPath)
+                    // Copy the backup back to the original location, overwriting if exists
+                    Files.copy(origPath, originalPath, StandardCopyOption.REPLACE_EXISTING)
 
                     Timber.i("Restored ${originalPath.fileName} from backup")
                     restoredCount++

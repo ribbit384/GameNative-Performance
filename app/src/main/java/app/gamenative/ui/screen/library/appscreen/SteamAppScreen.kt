@@ -56,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import app.gamenative.ui.component.dialog.GameManagerDialog
 import app.gamenative.ui.component.dialog.state.GameManagerDialogState
+import app.gamenative.ui.component.picker.rememberDownloadFolderPicker
 import com.winlator.core.GPUInformation
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -1548,6 +1549,37 @@ class SteamAppScreen : BaseAppScreen() {
             )
         }
 
+        var pendingInstallDlcIds by remember { mutableStateOf<List<Int>?>(null) }
+
+        val downloadPicker = rememberDownloadFolderPicker(
+            onPathSelected = { path ->
+                val dlcIds = pendingInstallDlcIds ?: emptyList()
+                val installedApp = SteamService.getInstalledApp(gameId)
+                if (installedApp != null) {
+                    // Remove markers if the app is already installed
+                    MarkerUtils.removeMarker(getAppDirPath(gameId), Marker.STEAM_DLL_REPLACED)
+                    MarkerUtils.removeMarker(getAppDirPath(gameId), Marker.STEAM_DLL_RESTORED)
+                    MarkerUtils.removeMarker(getAppDirPath(gameId), Marker.STEAM_COLDCLIENT_USED)
+                }
+
+                PostHog.capture(
+                    event = "game_install_started",
+                    properties = mapOf("game_name" to (appInfo?.name ?: ""))
+                )
+                CoroutineScope(Dispatchers.IO).launch {
+                    SteamService.downloadApp(gameId, dlcIds, isUpdateOrVerify = false, customInstallPath = path)
+                }
+                pendingInstallDlcIds = null
+            },
+            onFailure = {
+                Toast.makeText(context, "Failed to select folder", Toast.LENGTH_SHORT).show()
+                pendingInstallDlcIds = null
+            },
+            onCancel = {
+                pendingInstallDlcIds = null
+            }
+        )
+
         if (gameManagerDialogState.visible) {
             GameManagerDialog(
                 visible = true,
@@ -1556,10 +1588,14 @@ class SteamAppScreen : BaseAppScreen() {
                 },
                 onInstall = { dlcAppIds ->
                     hideGameManagerDialog(gameId)
-
+                    pendingInstallDlcIds = dlcAppIds
+                    downloadPicker.launchPicker()
+                },
+                onInstallCustom = { dlcAppIds, path ->
+                    hideGameManagerDialog(gameId)
+                    
                     val installedApp = SteamService.getInstalledApp(gameId)
                     if (installedApp != null) {
-                        // Remove markers if the app is already installed
                         MarkerUtils.removeMarker(getAppDirPath(gameId), Marker.STEAM_DLL_REPLACED)
                         MarkerUtils.removeMarker(getAppDirPath(gameId), Marker.STEAM_DLL_RESTORED)
                         MarkerUtils.removeMarker(getAppDirPath(gameId), Marker.STEAM_COLDCLIENT_USED)
@@ -1570,7 +1606,7 @@ class SteamAppScreen : BaseAppScreen() {
                         properties = mapOf("game_name" to (appInfo?.name ?: ""))
                     )
                     CoroutineScope(Dispatchers.IO).launch {
-                        SteamService.downloadApp(gameId, dlcAppIds, isUpdateOrVerify = false)
+                        SteamService.downloadApp(gameId, dlcAppIds, isUpdateOrVerify = false, customInstallPath = path)
                     }
                 },
                 onDismissRequest = {

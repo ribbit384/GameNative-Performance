@@ -1,49 +1,43 @@
-# GameNative
+# GameNative-Performance
 
+GameNative-Performance is a high-performance fork of GameNative, optimized specifically for Adreno-powered devices (Snapdragon 8 Gen 1/2/3/Elite). It introduces aggressive clock management, internal file system access, and robust save game portability.
 
-GameNative allows you to play games you own on Steam, Epic and GOG directly on Android devices, with cloud saves.
+## New Features (Performance Variant)
 
-[Playing Stray on Poco F6](https://github.com/user-attachments/assets/1870fd14-7de9-4054-ba92-d3a5c73686b5)
+### 🚀 Hardware Performance Optimization
+- **Force Maximum Clocks (Non-Root):** Integrated loop detection via Adreno Tools that re-applies maximum GPU clock requests every 5 seconds to prevent system downclocking.
+- **Root Maximum Performance:** For rooted users, an aggressive **500ms loop** that monitors hardware nodes and instantly rewrites CPU/GPU registers if a frequency drop is detected.
+- **Aggressive Power Profiles:** Forces Adreno power levels to 0 (Maximum) and disables GPU "napping" to maintain peak FPS in demanding titles.
+- **Fuzzy GPU Node Detection:** Automatically identifies and targets device-specific clock nodes (e.g., hitting 1200MHz on Adreno 840).
 
-This is a fork of [Pluvia](https://github.com/oxters168/Pluvia), a Steam client for Android.
+### 📂 Advanced File Management
+- **Embedded File Explorer:** A full-screen internal file manager with Multi-select, Copy, Cut, Paste, and Delete capabilities. Access `/data/data/app.gamenative` without needing root.
+- **GNP Documents Provider:** Exposes the app's internal data directory to external file managers (Solid Explorer, ZArchiver, etc.), making it easy to sideload patches or manually manage data.
+- **Enhanced Save Portability:** 
+    - **Robust Export:** Packages saves into a standardized `drive_c/` structure with proactive user remapping.
+    - **Fuzzy Import:** Intelligent "fuzzy" matching for game titles that ignores spaces/special characters, ensuring saves land in the correct folder even if the ZIP name differs.
+    - **Cross-User Compatibility:** Automatically remaps legacy `steamuser` paths to `xuser` for seamless migration from other Winlator/GameHub forks.
+
+### 🛠️ Stability & UX Fixes
+- **Async Root Checks:** Root verification no longer freezes the UI; it runs on a background thread with a 5-second safety timeout.
+- **Cleaned UI:** Refactored Graphics Settings to remove duplicate VKD3D and DX Wrapper entries, providing a cleaner, more intuitive interface.
+- **Error Resilience:** Added extensive try-catch wrapping around native performance calls to ensure the app remains stable on all Android versions.
 
 ## How to Use
-
-(Note that GameNative is still in its early stages, and all games may not work, or may require tweaking to get working well)
-1. Download the latest release [here](https://github.com/utkarshdalal/GameNative/releases/download/v0.7.2/gamenative-v0.7.2.apk)
-2. Install the APK on your Android device
-3. Login to your Steam account
-4. Install your game
-5. Hit play and enjoy!
+1. Download the latest release from the [Actions](https://github.com/maxjivi05/GameNative-Performance/actions) or Releases tab.
+2. Install the APK on your Android device.
+3. Configure your container in **Edit Container -> Graphics** to enable performance toggles.
+4. Access internal files via **Settings -> Debug -> Embedded File Access**.
 
 ## Support
 To report issues or receive support, join the [Discord server](https://discord.gg/2hKv4VfZfE)
 
-Do not create issues on GitHub as they will be automatically closed!
-
-You can support GameNative on Ko-fi at https://ko-fi.com/gamenative
-
 ## Building
-### IF YOU JUST WANT TO USE THE APP, PLEASE SEE THE HOW TO USE SECTION ABOVE. THIS IS ONLY NEEDED IF YOU WANT TO CONTRIBUTE FOR DEVELOPMENT.
-1. I use a normal build in Android studio. Hit me up if you can't figure out how to build.
-2. You may need to download some additional files and place them in the `src/main/assets` folder.
-These files are available on request for legitimate development purposes. Please write to me on Discord and I can share them with you there.
-3. **SteamGridDB API Key (Optional):** To enable automatic fetching of game images for Custom Games, add your SteamGridDB API key to `local.properties`:
-   ```
-   STEAMGRIDDB_API_KEY=your_api_key_here
-   ```
-   Get your API key from: https://www.steamgriddb.com/profile/preferences
-   If the API key is not configured, the app will log a message but continue to work normally without fetching images.
-
-## Community
-
-Join our [Discord server](https://discord.gg/2hKv4VfZfE) for support and updates.
+1. Open in Android Studio.
+2. Requires **Android SDK 35** and **OpenJDK 17**.
+3. Use `./gradlew assembleDebug` to build the performance variant.
 
 ## License
-[GPL 3.0](https://github.com/utkarshdalal/GameNative/blob/master/LICENSE)
+[GPL 3.0](https://github.com/maxjivi05/GameNative-Performance/blob/master/LICENSE)
 
-## Privacy Policy
-[Privacy Policy](https://github.com/utkarshdalal/GameNative/blob/master/PrivacyPolicy/README.md)
-
-**Disclaimer: This software is intended for playing games that you legally own. Do not use this software for piracy or any other illegal purposes. The maintainer of this fork assumes no
-responsibility for misuse.**
+**Disclaimer: This software is intended for playing games that you legally own. Do not use this software for piracy. The maintainer assumes no responsibility for misuse.**

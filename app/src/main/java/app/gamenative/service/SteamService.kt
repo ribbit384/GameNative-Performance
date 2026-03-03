@@ -307,7 +307,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
         }
 
-        /** Returns true if there is an incomplete download on disk (no complete marker). */
+        /** Returns true if there is an incomplete download on disk (in-progress marker or actively downloading). */
         fun hasPartialDownload(appId: Int): Boolean {
             val downloadingApp = getDownloadingAppInfoOf(appId)
             if (downloadingApp != null) {
@@ -315,7 +315,12 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
 
             val dirPath = getAppDirPath(appId)
-            return File(dirPath).exists() && !MarkerUtils.hasMarker(dirPath, Marker.DOWNLOAD_COMPLETE_MARKER)
+            val dir = File(dirPath)
+            if (!dir.exists()) return false
+
+            // Only consider it partial if there's an in-progress marker
+            // Legacy installations without markers should be treated as complete
+            return MarkerUtils.hasMarker(dirPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
         }
 
         private val syncInProgressApps = ConcurrentHashMap<Int, AtomicBoolean>()
@@ -363,6 +368,15 @@ class SteamService : Service(), IChallengeUrlChanged {
             get() = instance?.steamClient?.steamID?.isValid == true
         var isWaitingForQRAuth: Boolean = false
             private set
+
+        /**
+         * Checks if the user has stored Steam credentials (refresh token).
+         * Used to determine if auto-reconnection should be attempted on app start.
+         */
+        fun hasStoredCredentials(context: Context): Boolean {
+            PrefManager.init(context)
+            return PrefManager.refreshToken.isNotBlank()
+        }
 
         private val serverListPath: String
             get() = Paths.get(DownloadService.baseCacheDirPath, "server_list.bin").pathString
@@ -511,7 +525,21 @@ class SteamService : Service(), IChallengeUrlChanged {
         }
 
         fun isAppInstalled(appId: Int): Boolean {
-            return MarkerUtils.hasMarker(getAppDirPath(appId), Marker.DOWNLOAD_COMPLETE_MARKER)
+            val dirPath = getAppDirPath(appId)
+            // Check for new-style marker first
+            if (MarkerUtils.hasMarker(dirPath, Marker.DOWNLOAD_COMPLETE_MARKER)) {
+                return true
+            }
+            // Fallback for legacy installations: directory exists with content and no in-progress marker
+            val dir = File(dirPath)
+            if (dir.exists() && dir.isDirectory) {
+                val hasContent = dir.listFiles()?.isNotEmpty() == true
+                val isInProgress = MarkerUtils.hasMarker(dirPath, Marker.DOWNLOAD_IN_PROGRESS_MARKER)
+                if (hasContent && !isInProgress) {
+                    return true
+                }
+            }
+            return false
         }
 
         fun getAppDlc(appId: Int): Map<Int, DepotInfo> {
@@ -715,6 +743,17 @@ class SteamService : Service(), IChallengeUrlChanged {
         fun getAppDirPath(gameId: Int): String {
 
             val info = getAppInfoOf(gameId)
+
+            // Check custom install directory first (only if it's a full absolute path)
+            // installDir from PICS metadata is just a folder name, custom installs save full path
+            val customDir = info?.installDir.orEmpty()
+            if (customDir.isNotEmpty() && (customDir.startsWith("/") || customDir.contains(File.separator))) {
+                // It's a full path (custom install location)
+                if (File(customDir).exists()) {
+                    return customDir
+                }
+            }
+
             val appName = getAppDirName(info)
             val oldName = info?.name.orEmpty()
 
@@ -987,7 +1026,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
         }
 
-        fun downloadApp(appId: Int, dlcAppIds: List<Int>, isUpdateOrVerify: Boolean): DownloadInfo? {
+        fun downloadApp(appId: Int, dlcAppIds: List<Int>, isUpdateOrVerify: Boolean, customInstallPath: String? = null): DownloadInfo? {
             // Enforce Wi-Fi-only downloads
             if (PrefManager.downloadOnWifiOnly && instance?.isWifiConnected == false) {
                 instance?.notificationHelper?.notify("Not connected to Wi‑Fi/LAN")
@@ -995,7 +1034,7 @@ class SteamService : Service(), IChallengeUrlChanged {
             }
             return getAppInfoOf(appId)?.let { appInfo ->
                 val depots = getDownloadableDepots(appId)
-                downloadApp(appId, depots, dlcAppIds, "public", isUpdateOrVerify)
+                downloadApp(appId, depots, dlcAppIds, "public", isUpdateOrVerify, customInstallPath)
             }
         }
 
@@ -1321,8 +1360,35 @@ class SteamService : Service(), IChallengeUrlChanged {
             userSelectedDlcAppIds: List<Int>,
             branch: String,
             isUpdateOrVerify: Boolean,
+            customInstallPath: String? = null,
         ): DownloadInfo? {
-            val appDirPath = getAppDirPath(appId)
+            var appDirPath = getAppDirPath(appId)
+
+            if (customInstallPath != null) {
+                // Determine if customInstallPath is the game folder itself or the parent
+                val appInfo = getAppInfoOf(appId)
+                val folderName = getAppDirName(appInfo)
+                val safeFolderName = if (folderName.isNotEmpty()) folderName else appId.toString()
+                
+                val customFile = File(customInstallPath)
+                val finalPath = if (customFile.name.equals(safeFolderName, ignoreCase = true)) {
+                    // User selected the game folder itself
+                    customFile.absolutePath
+                } else {
+                    // User selected parent folder, create/use subfolder
+                    File(customInstallPath, safeFolderName).absolutePath
+                }
+                
+                appDirPath = finalPath
+                
+                // Update SteamApp in DB
+                runBlocking {
+                    if (appInfo != null) {
+                        val updatedApp = appInfo.copy(installDir = finalPath)
+                        instance?.appDao?.update(updatedApp)
+                    }
+                }
+            }
 
             // Enforce Wi-Fi-only downloads
             if (PrefManager.downloadOnWifiOnly && instance?.isWifiConnected == false) {
@@ -1494,7 +1560,7 @@ class SteamService : Service(), IChallengeUrlChanged {
                             // Create AppItem with only mandatory appId
                             val mainAppItem = AppItem(
                                 appId,
-                                installDirectory = getAppDirPath(appId),
+                                installDirectory = appDirPath,
                                 depot = mainAppDepotIds,
                             )
 
@@ -1509,7 +1575,7 @@ class SteamService : Service(), IChallengeUrlChanged {
 
                             val dlcAppItem = AppItem(
                                 dlcAppId,
-                                installDirectory = getAppDirPath(appId),
+                                installDirectory = appDirPath,
                                 depot = dlcDepotIds
                             )
 
@@ -1522,7 +1588,6 @@ class SteamService : Service(), IChallengeUrlChanged {
                                 .let { selectSteamControllerConfig(it) }
 
                             if (controllerConfig != null) {
-                                val appDirPath = getAppDirPath(appId)
                                 val publishedFileId = controllerConfig.publishedFileId
 
                                 runCatching {
@@ -3209,12 +3274,18 @@ class SteamService : Service(), IChallengeUrlChanged {
                             // TODO maybe apps with -1 for the ownerAccountId can be stripped with necessities and name.
 
                             if (app.changeNumber != appFromDb?.lastChangeNumber) {
+                                // Preserve custom install path if it exists (full absolute path)
+                                val existingInstallDir = appFromDb?.installDir.orEmpty()
+                                val preserveInstallDir = existingInstallDir.isNotEmpty() &&
+                                    (existingInstallDir.startsWith("/") || existingInstallDir.contains(File.separator))
+
                                 app.keyValues.generateSteamApp().copy(
                                     packageId = packageId,
                                     ownerAccountId = ownerAccountId,
                                     receivedPICS = true,
                                     lastChangeNumber = app.changeNumber,
                                     licenseFlags = packageFromDb?.licenseFlags ?: EnumSet.noneOf(ELicenseFlags::class.java),
+                                    installDir = if (preserveInstallDir) existingInstallDir else app.keyValues.generateSteamApp().installDir,
                                 )
                             } else {
                                 null

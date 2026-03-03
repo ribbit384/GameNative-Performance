@@ -22,6 +22,8 @@ enum class AppOptionMenuType(val text: String) {
     ForceDownloadRemote("Force download remote saves"),
     ForceUploadLocal("Force upload local saves"),
     FetchSteamGridDBImages("Fetch game images"),
+    ImportSave("Import Save"),
+    ExportSave("Export Save"),
     TestGraphics("Test graphics"),
     ManageGameContent("Manage DLC");
 }

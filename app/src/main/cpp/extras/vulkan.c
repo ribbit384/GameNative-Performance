@@ -426,3 +426,25 @@ cleanup:
 
     return extensions;
 }
+
+typedef void (*PFN_adrenotools_set_turbo)(bool);
+
+JNIEXPORT void JNICALL
+Java_com_winlator_core_PerformanceTuner_setAdrenoPerformanceModeNative(JNIEnv *env, jclass obj, jboolean enabled) {
+    // Try to find the symbol in currently loaded libraries (including libadrenotools.so if linked)
+    PFN_adrenotools_set_turbo set_turbo = (PFN_adrenotools_set_turbo)dlsym(RTLD_DEFAULT, "adrenotools_set_turbo");
+    
+    if (!set_turbo) {
+        // Fallback: try to load libadrenotools.so explicitly
+        void *handle = dlopen("libadrenotools.so", RTLD_LAZY);
+        if (handle) {
+            set_turbo = (PFN_adrenotools_set_turbo)dlsym(handle, "adrenotools_set_turbo");
+            // We don't dlclose immediately because the library might be needed by the driver later,
+            // or we just leak it slightly for this session. Safer to not close if we found it.
+        }
+    }
+
+    if (set_turbo) {
+        set_turbo(enabled);
+    }
+}

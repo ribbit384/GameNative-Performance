@@ -242,119 +242,64 @@ class CustomGameAppScreen : BaseAppScreen() {
     }
 
     override fun onAfterFetchImages(context: Context, libraryItem: LibraryItem, gameFolderPath: String) {
-        // Extract icon from executable after fetching images
-        Timber.tag("CustomGameAppScreen").d("onAfterFetchImages called - appId: ${libraryItem.appId}, gameFolderPath: $gameFolderPath")
+        // Extract icon from executable after fetching images in a background coroutine
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            Timber.tag("CustomGameAppScreen").d("onAfterFetchImages called - appId: ${libraryItem.appId}, gameFolderPath: $gameFolderPath")
 
-        // Verify the path was resolved correctly, but use gameFolderPath as fallback
-        val resolvedPath = getInstallPath(context, libraryItem)
-        Timber.tag("CustomGameAppScreen").d("Resolved install path: ${resolvedPath ?: "null"}")
+            // Verify the path was resolved correctly, but use gameFolderPath as fallback
+            val resolvedPath = getInstallPath(context, libraryItem)
+            val actualGameFolderPath = resolvedPath ?: gameFolderPath
+            val gameFolder = java.io.File(actualGameFolderPath)
 
-        // Use resolvedPath if available, otherwise fall back to gameFolderPath (which was validated by caller)
-        val actualGameFolderPath = resolvedPath ?: gameFolderPath
-        if (resolvedPath != gameFolderPath && resolvedPath != null) {
-            Timber.tag("CustomGameAppScreen").w("Path mismatch! gameFolderPath: $gameFolderPath, resolvedPath: $resolvedPath, using: $actualGameFolderPath")
-        } else if (resolvedPath == null) {
-            Timber.tag("CustomGameAppScreen").w("Could not resolve install path, using provided gameFolderPath: $gameFolderPath")
-        }
-
-        val gameFolder = java.io.File(actualGameFolderPath)
-        if (gameFolder.exists() && gameFolder.isDirectory) {
-            Timber.tag("CustomGameAppScreen").i("Extracting icon from executable after fetching images")
-            try {
-                // Check if icon already exists by using the same method the UI uses
-                val existingIconPath = CustomGameScanner.findIconFileForCustomGame(context, libraryItem.appId)
-                val hasExtractedIcon = existingIconPath != null && existingIconPath.endsWith(".extracted.ico", ignoreCase = true)
-
-                Timber.tag("CustomGameAppScreen").d("Icon check - existingIconPath: ${existingIconPath ?: "null"}, hasExtractedIcon: $hasExtractedIcon")
-
-                // Also check if there's an extracted icon file anywhere in the folder (limited depth search)
-                // Limit search to 2 levels deep to avoid performance issues with large game folders
-                fun findExtractedIconLimited(dir: File, depth: Int = 0, maxDepth: Int = 2): File? {
-                    if (depth > maxDepth) return null
-                    dir.listFiles()?.forEach { file ->
-                        if (file.isDirectory) {
-                            val found = findExtractedIconLimited(file, depth + 1, maxDepth)
-                            if (found != null) return found
-                        } else if (file.name.endsWith(".extracted.ico", ignoreCase = true)) {
-                            return file
-                        }
-                    }
-                    return null
-                }
-                val extractedIconFile = findExtractedIconLimited(gameFolder)
-                Timber.tag("CustomGameAppScreen").d("Recursive search found extracted icon: ${extractedIconFile?.absolutePath ?: "null"}")
-
-                // If findIconFileForCustomGame didn't find an extracted icon, but one exists, we should still try to extract
-                // (maybe the container path isn't set or the icon is in a different location)
-                val shouldExtract = !hasExtractedIcon || (extractedIconFile != null && existingIconPath != extractedIconFile.absolutePath)
-
-                if (shouldExtract) {
-                    // First, try using the container's selected executable if available
+            if (gameFolder.exists() && gameFolder.isDirectory) {
+                try {
                     val containerManager = com.winlator.container.ContainerManager(context)
-                    val hasContainer = containerManager.hasContainer(libraryItem.appId)
-                    Timber.tag("CustomGameAppScreen").d("Container exists: $hasContainer")
-
-                    if (hasContainer) {
+                    if (containerManager.hasContainer(libraryItem.appId)) {
                         val container = containerManager.getContainerById(libraryItem.appId)
                         val relExe = container.executablePath
-                        Timber.tag("CustomGameAppScreen").d("Container executable path: ${relExe ?: "null"}")
 
                         if (!relExe.isNullOrEmpty()) {
                             val exeFile = java.io.File(gameFolder, relExe.replace('/', java.io.File.separatorChar))
-                            Timber.tag("CustomGameAppScreen").d("Checking executable file: ${exeFile.absolutePath}, exists: ${exeFile.exists()}")
-
                             if (exeFile.exists()) {
-                                val outIco = java.io.File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.ico")
-                                Timber.tag("CustomGameAppScreen").d("Attempting to extract icon to: ${outIco.absolutePath}")
-                                val extracted = app.gamenative.utils.ExeIconExtractor.tryExtractMainIcon(exeFile, outIco)
-                                Timber.tag("CustomGameAppScreen").d("Icon extraction result: $extracted")
+                                val outPng = java.io.File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.png")
+                                
+                                // FORCE UPDATE: Delete existing icon to ensure fresh extraction
+                                if (outPng.exists()) {
+                                    Timber.tag("CustomGameAppScreen").d("Deleting existing icon to force update: ${outPng.absolutePath}")
+                                    outPng.delete()
+                                }
+
+                                Timber.tag("CustomGameAppScreen").d("Attempting to extract icon to: ${outPng.absolutePath}")
+                                val extracted = app.gamenative.utils.ExeIconExtractor.tryExtractMainIconAsPng(exeFile, outPng)
 
                                 if (extracted) {
                                     Timber.tag("CustomGameAppScreen").d("Extracted icon from selected executable: ${exeFile.name}")
-                                } else {
-                                    Timber.tag("CustomGameAppScreen").w("Failed to extract icon from selected executable: ${exeFile.name}")
+                                    // Notify UI that images (icon) have been updated
+                                    PluviaApp.events.emit(AndroidEvent.CustomGameImagesFetched(libraryItem.appId))
+                                    return@launch
                                 }
                             }
                         }
                     }
 
-                    // If that didn't work, try finding a unique executable
+                    // Fallback to unique executable if no container or selected exe failed
                     val uniqueExeRel = CustomGameScanner.findUniqueExeRelativeToFolder(gameFolder)
-                    Timber.tag("CustomGameAppScreen").d("Unique executable found: ${uniqueExeRel ?: "null"}")
-
                     if (!uniqueExeRel.isNullOrEmpty()) {
                         val exeFile = java.io.File(gameFolder, uniqueExeRel.replace('/', java.io.File.separatorChar))
-                        Timber.tag("CustomGameAppScreen").d("Checking unique executable file: ${exeFile.absolutePath}, exists: ${exeFile.exists()}")
-
                         if (exeFile.exists()) {
-                            val outIco = java.io.File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.ico")
-                            // Only extract if we haven't already extracted from the selected exe
-                            if (!outIco.exists()) {
-                                Timber.tag("CustomGameAppScreen").d("Attempting to extract icon to: ${outIco.absolutePath}")
-                                val extracted = app.gamenative.utils.ExeIconExtractor.tryExtractMainIcon(exeFile, outIco)
-                                Timber.tag("CustomGameAppScreen").d("Icon extraction result: $extracted")
-
-                                if (extracted) {
+                            val outPng = java.io.File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.png")
+                            if (!outPng.exists()) {
+                                if (app.gamenative.utils.ExeIconExtractor.tryExtractMainIconAsPng(exeFile, outPng)) {
                                     Timber.tag("CustomGameAppScreen").d("Extracted icon from unique executable: ${exeFile.name}")
-                                } else {
-                                    Timber.tag("CustomGameAppScreen").w("Failed to extract icon from unique executable: ${exeFile.name}")
+                                    PluviaApp.events.emit(AndroidEvent.CustomGameImagesFetched(libraryItem.appId))
                                 }
-                            } else {
-                                Timber.tag("CustomGameAppScreen").d("Icon file already exists: ${outIco.absolutePath}")
                             }
                         }
-                    } else {
-                        Timber.tag("CustomGameAppScreen").w("No unique executable found in folder: $gameFolderPath")
                     }
-                } else {
-                    Timber.tag("CustomGameAppScreen").d("Icon already exists, skipping extraction")
+                } catch (e: Exception) {
+                    Timber.tag("CustomGameAppScreen").e(e, "Failed to extract icon from executable")
                 }
-            } catch (e: Exception) {
-                Timber.tag("CustomGameAppScreen").e(e, "Failed to extract icon from executable")
-                // Silently continue - icon extraction is optional
             }
-        } else {
-            Timber.tag("CustomGameAppScreen").e("Game folder does not exist: $gameFolderPath")
         }
     }
 
@@ -406,6 +351,11 @@ class CustomGameAppScreen : BaseAppScreen() {
 
     override fun saveContainerConfig(context: Context, libraryItem: LibraryItem, config: ContainerData) {
         ContainerUtils.applyToContainer(context, libraryItem.appId, config)
+        // Trigger icon extraction after saving container config (executable path might have changed)
+        val gameFolderPath = getInstallPath(context, libraryItem)
+        if (gameFolderPath != null) {
+            onAfterFetchImages(context, libraryItem, gameFolderPath)
+        }
     }
 
     override fun supportsContainerConfig(): Boolean = true

@@ -652,7 +652,7 @@ object PrefManager {
     private val TIPPED = booleanPreferencesKey("tipped")
     var tipped: Boolean
         get() {
-            val value = getPref(TIPPED, false)
+            val value = getPref(TIPPED, true)
             return value
         }
         set(value) {
@@ -913,4 +913,14 @@ object PrefManager {
         set(value) {
             setPref(GAME_COMPATIBILITY_CACHE, value)
         }
+
+    private val FORCE_ADRENO_CLOCKS = booleanPreferencesKey("force_adreno_clocks")
+    var forceAdrenoClocks: Boolean
+        get() = getPref(FORCE_ADRENO_CLOCKS, false)
+        set(value) = setPref(FORCE_ADRENO_CLOCKS, value)
+
+    private val ROOT_PERFORMANCE_MODE = booleanPreferencesKey("root_performance_mode")
+    var rootPerformanceMode: Boolean
+        get() = getPref(ROOT_PERFORMANCE_MODE, false)
+        set(value) = setPref(ROOT_PERFORMANCE_MODE, value)
 }

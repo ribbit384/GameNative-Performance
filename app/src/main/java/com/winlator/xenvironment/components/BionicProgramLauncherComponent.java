@@ -49,6 +49,8 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.winlator.core.PerformanceTuner;
+
 import app.gamenative.PluviaApp;
 import app.gamenative.events.AndroidEvent;
 import app.gamenative.service.SteamService;
@@ -95,6 +97,27 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
             else
                 extractBox64Files();
             if (preUnpack != null) preUnpack.run();
+            
+            // Apply performance settings
+            try {
+                if (container != null) {
+                    if (container.isRootPerformanceMode()) {
+                        PerformanceTuner.startRootPerformanceMode();
+                    } else {
+                        PerformanceTuner.stopRootPerformanceMode();
+                    }
+                    
+                    if (container.isForceAdrenoClocks()) {
+                        PerformanceTuner.startNonRootPerformanceMode();
+                        envVars.put("ADRENOTOOLS_GPU_TURBO", "1");
+                    } else {
+                        PerformanceTuner.stopNonRootPerformanceMode();
+                    }
+                }
+            } catch (Throwable t) {
+                Log.e("BionicProgramLauncherComponent", "Failed to apply performance settings", t);
+            }
+
             PluviaApp.events.emitJava(new AndroidEvent.SetBootingSplashText("Launching game..."));
             pid = execGuestProgram();
             Log.d("BionicProgramLauncherComponent", "Process " + pid + " started");
@@ -114,6 +137,7 @@ public class BionicProgramLauncherComponent extends GuestProgramLauncherComponen
                 }
                 SteamService.setKeepAlive(false);
             }
+            PerformanceTuner.stopRootPerformanceMode();
             execShellCommand("wineserver -k");
         }
     }

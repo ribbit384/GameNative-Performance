@@ -86,6 +86,8 @@ data class ContainerData(
     val sharpnessEffect: String = "None",
     val sharpnessLevel: Int = 100,
     val sharpnessDenoise: Int = 100,
+    val forceAdrenoClocks: Boolean = false,
+    val rootPerformanceMode: Boolean = false,
 ) {
     companion object {
         val Saver = mapSaver(
@@ -143,6 +145,8 @@ data class ContainerData(
                     "sharpnessEffect" to state.sharpnessEffect,
                     "sharpnessLevel" to state.sharpnessLevel,
                     "sharpnessDenoise" to state.sharpnessDenoise,
+                    "forceAdrenoClocks" to state.forceAdrenoClocks,
+                    "rootPerformanceMode" to state.rootPerformanceMode,
                 )
             },
             restore = { savedMap ->
@@ -199,6 +203,8 @@ data class ContainerData(
                     sharpnessEffect = (savedMap["sharpnessEffect"] as? String) ?: "None",
                     sharpnessLevel = (savedMap["sharpnessLevel"] as? Int) ?: 100,
                     sharpnessDenoise = (savedMap["sharpnessDenoise"] as? Int) ?: 100,
+                    forceAdrenoClocks = (savedMap["forceAdrenoClocks"] as? Boolean) ?: false,
+                    rootPerformanceMode = (savedMap["rootPerformanceMode"] as? Boolean) ?: false,
                 )
             },
         )

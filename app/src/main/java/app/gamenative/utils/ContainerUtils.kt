@@ -138,6 +138,8 @@ object ContainerUtils {
             sharpnessEffect = PrefManager.sharpnessEffect,
             sharpnessLevel = PrefManager.sharpnessLevel,
             sharpnessDenoise = PrefManager.sharpnessDenoise,
+            forceAdrenoClocks = PrefManager.forceAdrenoClocks,
+            rootPerformanceMode = PrefManager.rootPerformanceMode,
         )
     }
 
@@ -196,6 +198,8 @@ object ContainerUtils {
         PrefManager.sharpnessEffect = containerData.sharpnessEffect
         PrefManager.sharpnessLevel = containerData.sharpnessLevel
         PrefManager.sharpnessDenoise = containerData.sharpnessDenoise
+        PrefManager.forceAdrenoClocks = containerData.forceAdrenoClocks
+        PrefManager.rootPerformanceMode = containerData.rootPerformanceMode
     }
 
     fun toContainerData(container: Container): ContainerData {
@@ -299,6 +303,8 @@ object ContainerUtils {
             sharpnessEffect = container.getExtra("sharpnessEffect", "None"),
             sharpnessLevel = container.getExtra("sharpnessLevel", "100").toIntOrNull() ?: 100,
             sharpnessDenoise = container.getExtra("sharpnessDenoise", "100").toIntOrNull() ?: 100,
+            forceAdrenoClocks = container.isForceAdrenoClocks,
+            rootPerformanceMode = container.isRootPerformanceMode,
         )
     }
 
@@ -368,6 +374,8 @@ object ContainerUtils {
                 "audioDriver" -> value?.let { updatedData.copy(audioDriver = it as? String ?: updatedData.audioDriver) } ?: updatedData
                 "wincomponents" -> value?.let { updatedData.copy(wincomponents = it as? String ?: updatedData.wincomponents) } ?: updatedData
                 "videoMemorySize" -> value?.let { updatedData.copy(videoMemorySize = it as? String ?: updatedData.videoMemorySize) } ?: updatedData
+                "forceAdrenoClocks" -> value?.let { updatedData.copy(forceAdrenoClocks = it as? Boolean ?: updatedData.forceAdrenoClocks) } ?: updatedData
+                "rootPerformanceMode" -> value?.let { updatedData.copy(rootPerformanceMode = it as? Boolean ?: updatedData.rootPerformanceMode) } ?: updatedData
                 else -> updatedData
             }
         }
@@ -450,6 +458,8 @@ object ContainerUtils {
         container.setForceDlc(containerData.forceDlc)
         container.setUseLegacyDRM(containerData.useLegacyDRM)
         container.setUnpackFiles(containerData.unpackFiles)
+        container.isForceAdrenoClocks = containerData.forceAdrenoClocks
+        container.isRootPerformanceMode = containerData.rootPerformanceMode
         if (previousUnpackFiles != containerData.unpackFiles && containerData.unpackFiles) {
             container.setNeedsUnpacking(true)
         }

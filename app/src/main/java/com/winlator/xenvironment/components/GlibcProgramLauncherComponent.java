@@ -32,6 +32,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 
+import com.winlator.core.PerformanceTuner;
 import app.gamenative.PluviaApp;
 import app.gamenative.events.AndroidEvent;
 import app.gamenative.service.SteamService;
@@ -72,6 +73,26 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
             extractBox64Files();
             copyDefaultBox64RCFile();
             if (preUnpack != null) preUnpack.run();
+            
+            try {
+                if (container != null) {
+                    if (container.isRootPerformanceMode()) {
+                        PerformanceTuner.startRootPerformanceMode();
+                    } else {
+                        PerformanceTuner.stopRootPerformanceMode();
+                    }
+                    
+                    if (container.isForceAdrenoClocks()) {
+                        PerformanceTuner.startNonRootPerformanceMode();
+                        envVars.put("ADRENOTOOLS_GPU_TURBO", "1");
+                    } else {
+                        PerformanceTuner.stopNonRootPerformanceMode();
+                    }
+                }
+            } catch (Throwable t) {
+                Log.e("GlibcProgramLauncherComponent", "Failed to apply performance settings", t);
+            }
+
             PluviaApp.events.emitJava(new AndroidEvent.SetBootingSplashText("Launching game..."));
             pid = execGuestProgram();
             Log.d("GlibcProgramLauncherComponent", "Process " + pid + " started");
@@ -93,6 +114,7 @@ public class GlibcProgramLauncherComponent extends GuestProgramLauncherComponent
                 }
                 SteamService.setKeepAlive(false);
             }
+            PerformanceTuner.stopRootPerformanceMode();
             execShellCommand("wineserver -k");
         }
     }

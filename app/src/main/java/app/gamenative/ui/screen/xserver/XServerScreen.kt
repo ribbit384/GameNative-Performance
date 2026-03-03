@@ -547,6 +547,10 @@ fun XServerScreen(
                             showPhysicalControllerDialog = true
                         }
 
+                        NavigationDialog.ACTION_STRETCH_TO_FULLSCREEN -> {
+                            xServerView?.renderer?.toggleFullscreen()
+                        }
+
                         NavigationDialog.ACTION_EXIT_GAME -> {
                             if (currentAppInfo != null) {
                                 PostHog.capture(

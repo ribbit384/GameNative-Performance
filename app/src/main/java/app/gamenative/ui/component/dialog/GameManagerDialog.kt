@@ -45,6 +45,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import app.gamenative.BuildConfig
 import app.gamenative.R
 import app.gamenative.data.DepotInfo
@@ -52,6 +58,7 @@ import app.gamenative.service.SteamService
 import app.gamenative.service.SteamService.Companion.INVALID_APP_ID
 import app.gamenative.ui.component.LoadingScreen
 import app.gamenative.ui.component.topbar.BackButton
+import app.gamenative.ui.components.getPathFromTreeUri
 import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.internal.fakeAppInfo
 import app.gamenative.ui.theme.PluviaTheme
@@ -77,6 +84,7 @@ fun GameManagerDialog(
     visible: Boolean,
     onGetDisplayInfo: @Composable (Context) -> GameDisplayInfo,
     onInstall: (List<Int>) -> Unit,
+    onInstallCustom: ((List<Int>, String) -> Unit)? = null,
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
@@ -89,9 +97,23 @@ fun GameManagerDialog(
 
     val displayInfo = onGetDisplayInfo(context)
     val gameId = displayInfo.gameId
-
+    
     val installedApp = remember(gameId) {
         SteamService.getInstalledApp(gameId)
+    }
+
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val path = getPathFromTreeUri(uri)
+            if (path != null) {
+                val selectedIds = selectedAppIds
+                    .filter { selectedId -> selectedId.key in enabledAppIds.filter { enabledId -> enabledId.value } }
+                    .filter { selectedId -> selectedId.value }.keys.toList()
+                onInstallCustom?.invoke(selectedIds, path)
+            }
+        }
     }
     val installedDlcIds = installedApp?.dlcDepots.orEmpty()
 
@@ -475,6 +497,17 @@ fun GameManagerDialog(
                                     modifier = Modifier.weight(0.5f),
                                     text = installSizeDisplay()
                                 )
+
+                                if (onInstallCustom != null) {
+                                    IconButton(
+                                        onClick = { launcher.launch(null) }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FolderOpen,
+                                            contentDescription = "Install to specific folder"
+                                        )
+                                    }
+                                }
 
                                 Button(
                                     enabled = installButtonEnabled(),

@@ -16,6 +16,7 @@ import app.gamenative.data.GameSource
 import app.gamenative.db.dao.SteamAppDao
 import app.gamenative.db.dao.GOGGameDao
 import app.gamenative.db.dao.EpicGameDao
+import app.gamenative.db.dao.AppInfoDao
 import app.gamenative.service.DownloadService
 import app.gamenative.service.SteamService
 import app.gamenative.ui.data.LibraryState
@@ -49,6 +50,7 @@ class LibraryViewModel @Inject constructor(
     private val steamAppDao: SteamAppDao,
     private val gogGameDao: GOGGameDao,
     private val epicGameDao: EpicGameDao,
+    private val appInfoDao: AppInfoDao,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -290,9 +292,8 @@ class LibraryViewModel @Inject constructor(
             val currentState = _state.value
             val currentFilter = AppFilter.getAppType(currentState.appInfoSortType)
 
-            // Fetch download directory apps once on IO thread and cache as a HashSet for O(1) lookups
-            val downloadDirectoryApps = DownloadService.getDownloadDirectoryApps()
-            val downloadDirectorySet = downloadDirectoryApps.toHashSet()
+            // Fetch installed app IDs from DB source of truth (includes custom paths)
+            val installedAppIds = appInfoDao.getAllInstalledAppIds().toHashSet()
 
             // Filter Steam apps first (no pagination yet)
             // Note: Don't sort individual lists - we'll sort the combined list for consistent ordering
@@ -331,14 +332,14 @@ class LibraryViewModel @Inject constructor(
                 }
                 .filter { item ->
                     if (currentState.appInfoSortType.contains(AppFilter.INSTALLED)) {
-                        downloadDirectoryApps.contains(SteamService.getAppDirName(item))
+                        installedAppIds.contains(item.id)
                     } else {
                         true
                     }
                 }
                 .sortedWith(
                     compareByDescending<SteamApp> {
-                        downloadDirectorySet.contains(SteamService.getAppDirName(it))
+                        installedAppIds.contains(it.id)
                     }.thenBy { it.name.lowercase() }
                 )
                 .toList()
@@ -346,7 +347,7 @@ class LibraryViewModel @Inject constructor(
             // Map Steam apps to UI items
             data class LibraryEntry(val item: LibraryItem, val isInstalled: Boolean)
             val steamEntries: List<LibraryEntry> = filteredSteamApps.map { item ->
-                val isInstalled = downloadDirectorySet.contains(SteamService.getAppDirName(item))
+                val isInstalled = installedAppIds.contains(item.id)
                 LibraryEntry(
                     item = LibraryItem(
                         index = 0, // temporary, will be re-indexed after combining and paginating

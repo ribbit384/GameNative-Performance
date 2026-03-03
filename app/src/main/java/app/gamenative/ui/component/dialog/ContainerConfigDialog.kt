@@ -556,6 +556,10 @@ fun ContainerConfigDialog(
         var sharpnessLevel by sharpnessLevelRef
         val sharpnessDenoiseRef = rememberSaveable { mutableIntStateOf(config.sharpnessDenoise.coerceIn(0, 100)) }
         var sharpnessDenoise by sharpnessDenoiseRef
+        val forceAdrenoClocksCheckedRef = rememberSaveable { mutableStateOf(config.forceAdrenoClocks) }
+        var forceAdrenoClocksChecked by forceAdrenoClocksCheckedRef
+        val rootPerformanceModeCheckedRef = rememberSaveable { mutableStateOf(config.rootPerformanceMode) }
+        var rootPerformanceModeChecked by rootPerformanceModeCheckedRef
         val adrenotoolsTurnipCheckedRef = rememberSaveable {
             val cfg = KeyValueSet(config.graphicsDriverConfig)
             mutableStateOf(cfg.get("adrenotoolsTurnip", "1") != "0")
@@ -949,6 +953,8 @@ fun ContainerConfigDialog(
             sharpnessEffectIndex = sharpnessEffectIndexRef,
             sharpnessLevel = sharpnessLevelRef,
             sharpnessDenoise = sharpnessDenoiseRef,
+            forceAdrenoClocksChecked = forceAdrenoClocksCheckedRef,
+            rootPerformanceModeChecked = rootPerformanceModeCheckedRef,
             adrenotoolsTurnipChecked = adrenotoolsTurnipCheckedRef,
             emulator64Index = emulator64IndexRef,
             emulator32Index = emulator32IndexRef,

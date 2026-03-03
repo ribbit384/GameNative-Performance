@@ -43,6 +43,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+import app.gamenative.utils.SaveManager
+
 /**
  * Abstract base class for AppScreen implementations.
  * This defines the contract that all game source-specific screens must implement.
@@ -483,6 +485,8 @@ abstract class BaseAppScreen {
         onClickPlay: (Boolean) -> Unit,
         onTestGraphics: () -> Unit,
         exportFrontendLauncher: ActivityResultLauncher<String>,
+        exportSaveLauncher: ActivityResultLauncher<String>,
+        importSaveLauncher: ActivityResultLauncher<Array<String>>,
     ): List<AppMenuOption> {
         val isInstalled = isInstalled(context, libraryItem)
         val menuOptions = mutableListOf<AppMenuOption>()
@@ -492,6 +496,16 @@ abstract class BaseAppScreen {
 
         if (isInstalled) {
             // Options only available when game is installed
+            
+            // Add Import/Export Save options
+            val gameName = getGameName(context, libraryItem)
+            menuOptions.add(AppMenuOption(AppOptionMenuType.ExportSave, onClick = {
+                exportSaveLauncher.launch("${gameName}_${System.currentTimeMillis()}.zip")
+            }))
+            menuOptions.add(AppMenuOption(AppOptionMenuType.ImportSave, onClick = {
+                importSaveLauncher.launch(arrayOf("application/zip"))
+            }))
+
             getRunContainerOption(context, libraryItem, onClickPlay)?.let { menuOptions.add(it) }
             getTestGraphicsOption(context, libraryItem, onTestGraphics)?.let { menuOptions.add(it) }
             getResetContainerOption(context, libraryItem)?.let { menuOptions.add(it) }
@@ -628,7 +642,60 @@ abstract class BaseAppScreen {
             },
         )
 
-        val optionsMenu = getOptionsMenu(context, libraryItem, onEditContainer, onBack, onClickPlay, onTestGraphics, exportFrontendLauncher)
+        // Export Save Launcher
+        val exportSaveLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.CreateDocument("application/zip"),
+            onResult = { uri ->
+                if (uri != null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val container = ContainerUtils.getContainer(context, libraryItem.appId)
+                            val gameName = displayInfo.name
+                            val success = SaveManager.exportSave(context, container, gameName, uri)
+                            withContext(Dispatchers.Main) {
+                                if (success) {
+                                    Toast.makeText(context, "Save exported successfully", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Failed to export save or no saves found", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Error exporting save: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
+        // Import Save Launcher
+        val importSaveLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+            onResult = { uri ->
+                if (uri != null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        try {
+                            val container = ContainerUtils.getContainer(context, libraryItem.appId)
+                            val success = SaveManager.importSave(context, container, uri)
+                            withContext(Dispatchers.Main) {
+                                if (success) {
+                                    Toast.makeText(context, "Save imported successfully", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Failed to import save", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "Error importing save: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
+        val optionsMenu = getOptionsMenu(context, libraryItem, onEditContainer, onBack, onClickPlay, onTestGraphics, exportFrontendLauncher, exportSaveLauncher, importSaveLauncher)
 
         // Get download info based on game source for progress tracking
         val downloadInfo = when (libraryItem.gameSource) {

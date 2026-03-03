@@ -29,11 +29,13 @@ import app.gamenative.ui.data.GameDisplayInfo
 import app.gamenative.ui.enums.AppOptionMenuType
 import app.gamenative.enums.Marker
 import app.gamenative.utils.ContainerUtils
-import app.gamenative.utils.ContainerUtils.extractGameIdFromContainerId
 import app.gamenative.utils.MarkerUtils
+import app.gamenative.utils.ContainerUtils.extractGameIdFromContainerId
 import com.winlator.container.ContainerData
 import com.winlator.container.ContainerManager
 import com.winlator.core.StringUtils
+import com.posthog.PostHog
+import app.gamenative.ui.component.picker.rememberDownloadFolderPicker
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
@@ -363,7 +365,7 @@ class EpicAppScreen : BaseAppScreen() {
      * @param scope Lifecycle-aware CoroutineScope from the calling composable
      * @param selectedGameIds List of game IDs to download (base game + selected DLCs)
      */
-    private fun performDownload(scope: CoroutineScope, context: Context, libraryItem: LibraryItem, selectedGameIds: List<Int>, onClickPlay: (Boolean) -> Unit) {
+    private fun performDownload(scope: CoroutineScope, context: Context, libraryItem: LibraryItem, selectedGameIds: List<Int>, onClickPlay: (Boolean) -> Unit, customInstallPath: String? = null) {
         Timber.tag(TAG).i("Starting Epic game download: ${libraryItem.gameId} with ${selectedGameIds.size} items (including DLCs)")
         scope.launch(Dispatchers.IO) {
             try {
@@ -378,7 +380,20 @@ class EpicAppScreen : BaseAppScreen() {
                 }
 
                 // Get install path
-                val installPath = EpicConstants.getGameInstallPath(context, game.appName)
+                var installPath = EpicConstants.getGameInstallPath(context, game.appName)
+                
+                if (customInstallPath != null) {
+                    // Create a subfolder using the game's appName (which is usually safe) or title
+                    var folderName = game.appName.ifEmpty { 
+                        game.title.replace(Regex("[^a-zA-Z0-9.-]"), "_") 
+                    }
+                    // Safety fallback: if folderName ended up empty (e.g. regex removed everything), use appId
+                    if (folderName.isBlank()) {
+                        folderName = libraryItem.appId.replace(Regex("[^a-zA-Z0-9.-]"), "_")
+                    }
+                    installPath = File(customInstallPath, folderName).absolutePath
+                }
+                
                 Timber.tag(TAG).d("Downloading Epic game to: $installPath")
 
                 // Determine if we should download DLCs (if more than just the base game is selected)
@@ -781,6 +796,23 @@ class EpicAppScreen : BaseAppScreen() {
                 }
         }
 
+        var pendingSelectedGameIds by remember { mutableStateOf<List<Int>?>(null) }
+
+        val downloadPicker = rememberDownloadFolderPicker(
+            onPathSelected = { path ->
+                val gameIds = pendingSelectedGameIds ?: emptyList()
+                performDownload(scope, context, libraryItem, gameIds, {}, path)
+                pendingSelectedGameIds = null
+            },
+            onFailure = {
+                Toast.makeText(context, "Failed to select folder", Toast.LENGTH_SHORT).show()
+                pendingSelectedGameIds = null
+            },
+            onCancel = {
+                pendingSelectedGameIds = null
+            }
+        )
+
         // Show install dialog if visible
         if (installDialogState.visible) {
             val onDismissRequest: (() -> Unit)? = {
@@ -793,7 +825,8 @@ class EpicAppScreen : BaseAppScreen() {
                 app.gamenative.ui.enums.DialogType.INSTALL_APP -> {
                     {
                         BaseAppScreen.hideInstallDialog(appId)
-                        performDownload(scope, context, libraryItem, listOf(libraryItem.gameId)) {}
+                        pendingSelectedGameIds = listOf(libraryItem.gameId)
+                        downloadPicker.launchPicker()
                     }
                 }
                 app.gamenative.ui.enums.DialogType.CANCEL_APP_DOWNLOAD -> {
@@ -837,7 +870,18 @@ class EpicAppScreen : BaseAppScreen() {
                 },
                 onInstall = { selectedGameIds ->
                     hideGameManagerDialog(gameId)
-                    performDownload(scope, context, libraryItem, selectedGameIds) {}
+                    pendingSelectedGameIds = selectedGameIds
+                    downloadPicker.launchPicker()
+                },
+                onInstallCustom = { selectedGameIds, path ->
+                    hideGameManagerDialog(gameId)
+                    // Call download directly with the custom path
+                    PostHog.capture(
+                        event = "game_install_started",
+                        properties = mapOf("game_name" to (libraryItem.name ?: ""))
+                    )
+                    
+                    EpicService.downloadGame(context, gameId, selectedGameIds, path)
                 },
                 onDismissRequest = {
                     hideGameManagerDialog(gameId)

@@ -50,6 +50,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.CountDownLatch
+import okhttp3.Request
+import okhttp3.OkHttpClient
+import java.io.File
+import java.io.FileOutputStream
+import timber.log.Timber
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.Json
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.LinearProgressIndicator
+
+enum class ContentSource { GN, MTR }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +80,17 @@ fun ContentsManagerDialog(open: Boolean, onDismiss: () -> Unit) {
 
     val mgr = remember(ctx) { ContentsManager(ctx) }
 
+    // Source selection
+    var selectedSource by remember { mutableStateOf(ContentSource.MTR) }
+    var mtrContents by remember { mutableStateOf<List<ContentProfile>>(emptyList()) }
+    var isLoadingMtr by remember { mutableStateOf(false) }
+
+    // Dropdown state for MTR
+    var selectedMtrType by remember { mutableStateOf(ContentProfile.ContentType.CONTENT_TYPE_DXVK) }
+    var typeExpandedMtr by remember { mutableStateOf(false) }
+    var selectedMtrProfile by remember { mutableStateOf<ContentProfile?>(null) }
+    var profileExpandedMtr by remember { mutableStateOf(false) }
+
     // Installed list state
     var currentType by remember { mutableStateOf(ContentProfile.ContentType.CONTENT_TYPE_DXVK) }
     val installedProfiles = remember { mutableStateListOf<ContentProfile>() }
@@ -75,9 +98,7 @@ fun ContentsManagerDialog(open: Boolean, onDismiss: () -> Unit) {
     var deleteTarget by remember { mutableStateOf<ContentProfile?>(null) }
 
     val refreshInstalled: () -> Unit = {
-        try {
-            mgr.syncContents()
-        } catch (_: Exception) {}
+        try { mgr.syncContents() } catch (_: Exception) {}
         installedProfiles.clear()
         try {
             val list = mgr.getProfiles(currentType)
@@ -88,6 +109,107 @@ fun ContentsManagerDialog(open: Boolean, onDismiss: () -> Unit) {
     LaunchedEffect(currentType) {
         withContext(Dispatchers.IO) { mgr.syncContents() }
         refreshInstalled()
+    }
+
+    // Load MTR contents
+    LaunchedEffect(selectedSource) {
+        if (selectedSource == ContentSource.MTR && mtrContents.isEmpty()) {
+            isLoadingMtr = true
+            scope.launch(Dispatchers.IO) {
+                try {
+                    val url = "https://raw.githubusercontent.com/maxjivi05/Components/main/contents.json"
+                    val request = Request.Builder().url(url).build()
+                    app.gamenative.ui.screen.settings.Net.http.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val jsonString = response.body?.string() ?: "[]"
+                            val jsonArray = Json.parseToJsonElement(jsonString).jsonArray
+                            val profiles = jsonArray.map { 
+                                val obj = it.jsonObject
+                                val typeStr = obj["type"]!!.toString().trim('"')
+                                val type = when(typeStr.lowercase()) {
+                                    "dxvk" -> ContentProfile.ContentType.CONTENT_TYPE_DXVK
+                                    "vkd3d" -> ContentProfile.ContentType.CONTENT_TYPE_VKD3D
+                                    "box64" -> ContentProfile.ContentType.CONTENT_TYPE_BOX64
+                                    "wowbox64" -> ContentProfile.ContentType.CONTENT_TYPE_WOWBOX64
+                                    "fexcore" -> ContentProfile.ContentType.CONTENT_TYPE_FEXCORE
+                                    else -> ContentProfile.ContentType.CONTENT_TYPE_WINE
+                                }
+                                ContentProfile().apply {
+                                    this.type = type
+                                    this.verName = obj["verName"]!!.toString().trim('"')
+                                    this.verCode = obj["verCode"]!!.toString().trim('"').toInt()
+                                    this.remoteUrl = obj["remoteUrl"]!!.toString().trim('"')
+                                }
+                            }
+                            withContext(Dispatchers.Main) { mtrContents = profiles }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "ContentsManagerDialog: Error loading MTR contents")
+                } finally {
+                    isLoadingMtr = false
+                }
+            }
+        }
+    }
+
+    val downloadAndInstallContent = { profile: ContentProfile ->
+        scope.launch {
+            isBusy = true
+            statusMessage = "Downloading..."
+            try {
+                val fileName = profile.remoteUrl!!.substringAfterLast('/')
+                val destFile = File(ctx.cacheDir, fileName)
+                
+                withContext(Dispatchers.IO) {
+                    val request = Request.Builder().url(profile.remoteUrl!!).build()
+                    app.gamenative.ui.screen.settings.Net.http.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) throw java.io.IOException("Unexpected code $response")
+                        val body = response.body ?: throw java.io.IOException("Empty body")
+                        val inputStream = body.byteStream()
+                        val outputStream = java.io.FileOutputStream(destFile)
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            outputStream.write(buffer, 0, bytesRead)
+                        }
+                        outputStream.flush()
+                        outputStream.close()
+                        inputStream.close()
+                    }
+                }
+
+                statusMessage = "Validating..."
+                val uri = Uri.fromFile(destFile)
+                val result = withContext(Dispatchers.IO) {
+                    var outProfile: ContentProfile? = null
+                    var fail: ContentsManager.InstallFailedReason? = null
+                    val latch = CountDownLatch(1)
+                    mgr.extraContentFile(uri, object : ContentsManager.OnInstallFinishedCallback {
+                        override fun onFailed(reason: ContentsManager.InstallFailedReason, e: Exception) { fail = reason; latch.countDown() }
+                        override fun onSucceed(p: ContentProfile) { outProfile = p; latch.countDown() }
+                    })
+                    latch.await()
+                    outProfile to fail
+                }
+
+                val (extractedProfile, fail) = result
+                if (extractedProfile != null) {
+                    performFinishInstall(ctx, mgr, extractedProfile) {
+                        refreshInstalled()
+                        statusMessage = null
+                        isBusy = false
+                    }
+                } else {
+                    Toast.makeText(ctx, "Install failed: $fail", Toast.LENGTH_SHORT).show()
+                    isBusy = false
+                }
+                destFile.delete()
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                isBusy = false
+            }
+        }
     }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -173,75 +295,103 @@ fun ContentsManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                     .heightIn(max = 460.dp)
                     .verticalScroll(rememberScrollState())
             ) {
+                if (selectedSource == ContentSource.MTR) {
+                    if (isLoadingMtr) {
+                        CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                    } else {
+                        Text("Online Components (MTR):", style = MaterialTheme.typography.titleMedium)
+                        
+                        // Component Type Dropdown
+                        ExposedDropdownMenuBox(
+                            expanded = typeExpandedMtr,
+                            onExpandedChange = { typeExpandedMtr = !typeExpandedMtr },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = selectedMtrType.toString(),
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpandedMtr) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                placeholder = { Text("Select component type") }
+                            )
+                            ExposedDropdownMenu(expanded = typeExpandedMtr, onDismissRequest = { typeExpandedMtr = false }) {
+                                val types = listOf(
+                                    ContentProfile.ContentType.CONTENT_TYPE_DXVK,
+                                    ContentProfile.ContentType.CONTENT_TYPE_VKD3D,
+                                    ContentProfile.ContentType.CONTENT_TYPE_BOX64,
+                                    ContentProfile.ContentType.CONTENT_TYPE_WOWBOX64,
+                                    ContentProfile.ContentType.CONTENT_TYPE_FEXCORE
+                                )
+                                types.forEach { t ->
+                                    DropdownMenuItem(text = { Text(t.toString()) }, onClick = { selectedMtrType = t; selectedMtrProfile = null; typeExpandedMtr = false })
+                                }
+                            }
+                        }
+
+                        // Component Version Dropdown
+                        val availableProfiles = mtrContents.filter { it.type == selectedMtrType }
+                        ExposedDropdownMenuBox(
+                            expanded = profileExpandedMtr,
+                            onExpandedChange = { profileExpandedMtr = !profileExpandedMtr },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = selectedMtrProfile?.verName ?: "",
+                                onValueChange = {},
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = profileExpandedMtr) },
+                                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                                placeholder = { Text("Select version") }
+                            )
+                            ExposedDropdownMenu(expanded = profileExpandedMtr, onDismissRequest = { profileExpandedMtr = false }) {
+                                availableProfiles.forEach { p ->
+                                    DropdownMenuItem(text = { Text(p.verName) }, onClick = { selectedMtrProfile = p; profileExpandedMtr = false })
+                                }
+                            }
+                        }
+
+                        if (selectedMtrProfile != null) {
+                            Button(
+                                onClick = { downloadAndInstallContent(selectedMtrProfile!!) },
+                                enabled = !isBusy,
+                                modifier = Modifier.padding(top = 16.dp)
+                            ) { Text("Download & Install") }
+                        }
+                    }
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 12.dp))
                 Text(
-                    text = "Install additional components (.wcp: tar.xz/zst)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    text = "Import local components (.wcp):",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
 
                 Button(
                     onClick = {
-                        // Let users pick any file; manager validates supported archives
                         SteamService.isImporting = true
                         importLauncher.launch(arrayOf("*/*"))
                     },
                     enabled = !isBusy,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    modifier = Modifier.padding(bottom = 12.dp)
                 ) { Text(stringResource(R.string.import_wcp_from_device)) }
 
                 if (isBusy) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         CircularProgressIndicator(modifier = Modifier.height(20.dp), strokeWidth = 2.dp)
                         Text(text = statusMessage ?: stringResource(R.string.working))
-                    }
-                } else if (!statusMessage.isNullOrEmpty()) {
-                    Text(text = statusMessage ?: "", style = MaterialTheme.typography.bodySmall)
-                }
-
-                pendingProfile?.let { profile ->
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-                    Text(text = stringResource(R.string.selected_content), style = MaterialTheme.typography.titleMedium)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp)
-                    ) {
-                        InfoRow(label = "Type", value = profile.type.toString())
-                        InfoRow(label = "Version", value = profile.verName)
-                        InfoRow(label = "Code", value = profile.verCode.toString())
-                        if (!profile.desc.isNullOrEmpty()) InfoRow(label = "Description", value = profile.desc)
-                    }
-
-                    if (untrustedFiles.isEmpty()) {
-                        Text(
-                            text = "All files are trusted. Ready to install.",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    performFinishInstall(ctx, mgr, profile) { _ ->
-                                        pendingProfile = null
-                                        currentType = profile.type
-                                        refreshInstalled()
-                                        statusMessage = null
-                                    }
-                                }
-                            },
-                            enabled = !isBusy,
-                            modifier = Modifier.padding(top = 8.dp)
-                        ) { Text(stringResource(R.string.install)) }
                     }
                 }
 
                 Divider(modifier = Modifier.padding(vertical = 12.dp))
                 Text(text = stringResource(R.string.installed_contents), style = MaterialTheme.typography.titleMedium)
 
-                // Content type selector
+                // Content type selector for installed
                 ExposedDropdownMenuBox(
                     expanded = typeExpanded,
                     onExpandedChange = { typeExpanded = !typeExpanded },
@@ -269,7 +419,7 @@ fun ContentsManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                             ContentProfile.ContentType.CONTENT_TYPE_WOWBOX64,
                             ContentProfile.ContentType.CONTENT_TYPE_FEXCORE
                         )
-                        ContentProfile.ContentType.values().filter { it in allowed }.forEach { t ->
+                        allowed.forEach { t ->
                             DropdownMenuItem(
                                 text = { Text(t.toString()) },
                                 onClick = {
@@ -299,7 +449,8 @@ fun ContentsManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(text = "${p.verName} (${p.verCode})", style = MaterialTheme.typography.bodyMedium)
@@ -351,7 +502,7 @@ fun ContentsManagerDialog(open: Boolean, onDismiss: () -> Unit) {
                     showUntrustedConfirm = false
                     isBusy = true
                     scope.launch {
-                        performFinishInstall(ctx, mgr, profile) { _ ->
+                        performFinishInstall(ctx, mgr, profile) {
                             pendingProfile = null
                             currentType = profile.type
                             refreshInstalled()
@@ -431,5 +582,3 @@ private suspend fun performFinishInstall(
     onDone(msg)
     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 }
-
-

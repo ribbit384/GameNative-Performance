@@ -17,8 +17,8 @@ public class XConnectorEpoll implements Runnable {
     private boolean multithreadedClients = false;
     private boolean canReceiveAncillaryMessages = false;
     private boolean monitorClients = true;
-    private int initialInputBufferCapacity = 128;
-    private int initialOutputBufferCapacity = 128;
+    private int initialInputBufferCapacity = 4096;
+    private int initialOutputBufferCapacity = 4096;
     private final SparseArray<Client> connectedClients = new SparseArray<>();
 
     private native boolean addFdToEpoll(int i, int i2);

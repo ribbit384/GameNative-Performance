@@ -118,6 +118,10 @@ fun PluviaMain(
 
     var isConnecting by rememberSaveable { mutableStateOf(false) }
 
+    // Track if this is initial app launch vs returning from minimize
+    // Only show connecting screen on initial launch, not on reconnection after minimize
+    var isInitialLaunch by rememberSaveable { mutableStateOf(true) }
+
     var gameBackAction by remember { mutableStateOf<() -> Unit?>({}) }
 
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -274,7 +278,7 @@ fun PluviaMain(
                                         onSuccess = viewModel::launchApp,
                                     )
                                 }
-                            } else if (PluviaApp.xEnvironment == null) {
+                            } else if (PluviaApp.xEnvironment == null && isInitialLaunch) {
                                 Timber.i("Navigating to library")
                                 navController.navigate(PluviaScreen.Home.route)
 
@@ -392,8 +396,11 @@ fun PluviaMain(
 
     LaunchedEffect(Unit) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            if (!state.isSteamConnected && !isConnecting && !SteamService.keepAlive) {
-                Timber.d("[PluviaMain]: Steam not connected - attempt")
+            // Only auto-start Steam service if user has stored credentials (was previously logged in)
+            // Otherwise, let the user initiate login from Settings
+            val hasCredentials = SteamService.hasStoredCredentials(context)
+            if (!state.isSteamConnected && !isConnecting && !SteamService.keepAlive && hasCredentials) {
+                Timber.d("[PluviaMain]: Steam credentials found, attempting reconnection")
                 isConnecting = true
                 context.startForegroundService(Intent(context, SteamService::class.java))
             }
@@ -416,9 +423,18 @@ fun PluviaMain(
                 app.gamenative.service.epic.EpicService.start(context)
             }
 
+            // Navigate from LoginUser to Home if user is already logged in
             if (SteamService.isLoggedIn && !SteamService.keepAlive && navController.currentDestination?.route == PluviaScreen.LoginUser.route) {
                 navController.navigate(PluviaScreen.Home.route)
             }
+        }
+    }
+
+    // When user navigates to login screen, ensure Steam service is started for login
+    LaunchedEffect(state.currentScreen) {
+        if (state.currentScreen == PluviaScreen.LoginUser && !state.isSteamConnected && !SteamService.isConnected) {
+            Timber.d("[PluviaMain]: User on login screen, starting Steam service for login")
+            context.startForegroundService(Intent(context, SteamService::class.java))
         }
     }
 
@@ -426,6 +442,8 @@ fun PluviaMain(
     LaunchedEffect(state.isSteamConnected) {
         if (state.isSteamConnected) {
             isConnecting = false
+            // Mark initial launch as complete after first successful connection
+            isInitialLaunch = false
         }
     }
 
@@ -471,13 +489,17 @@ fun PluviaMain(
             Timber.d("Timeout reached, isSteamConnected=${state.isSteamConnected}")
             if (!state.isSteamConnected) {
                 isConnecting = false
+                // Mark initial launch as complete after timeout
+                isInitialLaunch = false
             }
         }
     }
 
-    // Show loading or error UI as appropriate
+    // Show loading screen only on initial launch when connecting
+    // On subsequent app resumes (after minimize), reconnection happens in background
+    // so the user stays on their current page
     when {
-        isConnecting -> {
+        isConnecting && isInitialLaunch -> {
             PluviaTheme(
                 isDark = when (state.appTheme) {
                     AppTheme.AUTO -> isSystemInDarkTheme()
@@ -491,6 +513,7 @@ fun PluviaMain(
                 ConnectingServersScreen(
                     onContinueOffline = {
                         isConnecting = false
+                        isInitialLaunch = false
                         navController.navigate(PluviaScreen.Home.route + "?offline=true")
                     },
                 )
@@ -905,7 +928,7 @@ fun PluviaMain(
 
         NavHost(
             navController = navController,
-            startDestination = PluviaScreen.LoginUser.route,
+            startDestination = PluviaScreen.Home.route,
         ) {
             /** Login **/
             /** Login **/
@@ -1024,6 +1047,9 @@ fun PluviaMain(
                     onAppTheme = viewModel::setTheme,
                     onPaletteStyle = viewModel::setPalette,
                     onBack = { navController.navigateUp() },
+                    onNavigateToSteamLogin = {
+                        navController.navigate(PluviaScreen.LoginUser.route)
+                    },
                 )
             }
         }

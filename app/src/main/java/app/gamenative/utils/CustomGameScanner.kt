@@ -124,13 +124,13 @@ object CustomGameScanner {
         if (!uniqueExeRel.isNullOrEmpty()) {
             val exeFile = File(folder, uniqueExeRel.replace('/', File.separatorChar))
             if (exeFile.exists()) {
-                val outIco = File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.ico")
+                val outPng = File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.png")
                 // Use cache if up to date, else (re)extract
-                val useCached = outIco.exists() && outIco.lastModified() >= exeFile.lastModified()
-                if (useCached) return outIco.absolutePath
+                val useCached = outPng.exists() && outPng.lastModified() >= exeFile.lastModified()
+                if (useCached) return outPng.absolutePath
                 try {
-                    if (ExeIconExtractor.tryExtractMainIcon(exeFile, outIco)) {
-                        return outIco.absolutePath
+                    if (ExeIconExtractor.tryExtractMainIconAsPng(exeFile, outPng)) {
+                        return outPng.absolutePath
                     }
                 } catch (e: Exception) {
                     // swallow and fall back
@@ -170,41 +170,69 @@ object CustomGameScanner {
                 if (!relExe.isNullOrEmpty()) {
                     val exeFile = File(folder, relExe.replace('/', File.separatorChar))
                     if (exeFile.exists()) {
-                        val outIco = File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.ico")
-                        val useCached = outIco.exists() && outIco.lastModified() >= exeFile.lastModified()
+                        val outPng = File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.png")
+                        val useCached = outPng.exists() && outPng.lastModified() >= exeFile.lastModified()
                         if (useCached) {
-                            Timber.tag("CustomGameScanner").d("Found cached icon at ${outIco.absolutePath}")
-                            return outIco.absolutePath
+                            Timber.tag("CustomGameScanner").d("Found cached icon at ${outPng.absolutePath}")
+                            return outPng.absolutePath
                         }
                         try {
-                            if (ExeIconExtractor.tryExtractMainIcon(exeFile, outIco)) {
-                                Timber.tag("CustomGameScanner").d("Extracted icon to ${outIco.absolutePath}")
-                                return outIco.absolutePath
+                            if (ExeIconExtractor.tryExtractMainIconAsPng(exeFile, outPng)) {
+                                Timber.tag("CustomGameScanner").d("Extracted icon to ${outPng.absolutePath}")
+                                return outPng.absolutePath
                             }
                         } catch (e: Exception) {
                             Timber.tag("CustomGameScanner").d(e, "Failed to extract icon from ${exeFile.name}")
                         }
-                    } else {
-                        Timber.tag("CustomGameScanner").d("Executable file does not exist: ${exeFile.absolutePath}")
                     }
-                } else {
-                    Timber.tag("CustomGameScanner").d("Container executable path is empty")
                 }
-            } else {
-                Timber.tag("CustomGameScanner").d("No container found for $appId")
             }
         } catch (e: Exception) {
             Timber.tag("CustomGameScanner").d(e, "Error checking container for $appId")
         }
 
-        // 3) If selected exe path failed or absent, try unique exe extraction
+        // 3) Try using the icon matching the selected container executable name if it exists as an extracted icon
+        try {
+            val cm = ContainerManager(context)
+            if (cm.hasContainer(appId)) {
+                val container = cm.getContainerById(appId)
+                val relExe = container.executablePath
+                if (!relExe.isNullOrEmpty()) {
+                    val exeBase = relExe.substringAfterLast('/').substringBeforeLast('.')
+                    
+                    fun findMatchingIconRecursive(dir: File, name: String): File? {
+                        val files = dir.listFiles() ?: return null
+                        // First check files in current dir
+                        files.filter { it.isFile && it.name.equals("$name.extracted.png", ignoreCase = true) }
+                            .firstOrNull()?.let { return it }
+                        
+                        // Then recurse into subdirs
+                        files.filter { it.isDirectory }
+                            .forEach { subdir ->
+                                findMatchingIconRecursive(subdir, name)?.let { return it }
+                            }
+                        return null
+                    }
+
+                    val matchingIcon = findMatchingIconRecursive(folder, exeBase)
+                    if (matchingIcon != null) {
+                        Timber.tag("CustomGameScanner").d("Found matching extracted icon for selected exe: ${matchingIcon.absolutePath}")
+                        return matchingIcon.absolutePath
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // ignore
+        }
+
+        // 4) If selected exe path failed or absent, try unique exe extraction
         val fromUnique = findIconFileForCustomGame(appId)
         if (!fromUnique.isNullOrEmpty()) {
             Timber.tag("CustomGameScanner").d("Found icon from unique executable: $fromUnique")
             return fromUnique
         }
 
-        // 4) As last resort, image heuristic
+        // 5) As last resort, image heuristic
         val fromHeuristic = findNearbyImageIcon(folder, null)
         if (fromHeuristic != null) {
             Timber.tag("CustomGameScanner").d("Found icon from heuristic: $fromHeuristic")
@@ -230,8 +258,8 @@ object CustomGameScanner {
 
         Timber.tag("CustomGameScanner").d("findNearbyImageIcon - Found ${allIcons.size} icon file(s): ${allIcons.map { it.name }}")
 
-        // First priority: prefer .extracted.ico files (these are extracted from executables)
-        val extractedIcons = allIcons.filter { it.name.endsWith(".extracted.ico", ignoreCase = true) }
+        // First priority: prefer .extracted.png files (these are extracted from executables)
+        val extractedIcons = allIcons.filter { it.name.endsWith(".extracted.png", ignoreCase = true) }
         if (extractedIcons.isNotEmpty()) {
             // If there's exactly one extracted icon, use it
             if (extractedIcons.size == 1) {
@@ -453,19 +481,43 @@ object CustomGameScanner {
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
                 val hasExtractedIcon = folder.listFiles { file ->
-                    file.isFile && file.name.endsWith(".extracted.ico", ignoreCase = true)
+                    file.isFile && file.name.endsWith(".extracted.png", ignoreCase = true)
                 }?.isNotEmpty() == true
 
                 if (!hasExtractedIcon) {
-                    val uniqueExeRel = findUniqueExeRelativeToFolder(folder)
-                    if (!uniqueExeRel.isNullOrEmpty()) {
-                        val exeFile = File(folder, uniqueExeRel.replace('/', File.separatorChar))
-                        if (exeFile.exists()) {
-                            val outIco = File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.ico")
-                            if (!outIco.exists() || outIco.lastModified() < exeFile.lastModified()) {
-                                if (ExeIconExtractor.tryExtractMainIcon(exeFile, outIco)) {
-                                    Timber.tag("CustomGameScanner").d("Extracted icon for ${folder.name} from ${exeFile.name}")
-                                }
+                    // Try to use container's selected exe first
+                    val context = DownloadService.appContext ?: return@launch
+                    val cm = ContainerManager(context)
+                    var targetExe: File? = null
+                    if (cm.hasContainer(appId)) {
+                        val container = cm.getContainerById(appId)
+                        val relExe = container.executablePath
+                        if (!relExe.isNullOrEmpty()) {
+                            val exeFile = File(folder, relExe.replace('/', File.separatorChar))
+                            if (exeFile.exists()) {
+                                targetExe = exeFile
+                            }
+                        }
+                    }
+
+                    // Fallback to unique exe
+                    if (targetExe == null) {
+                        val uniqueExeRel = findUniqueExeRelativeToFolder(folder)
+                        if (!uniqueExeRel.isNullOrEmpty()) {
+                            val exeFile = File(folder, uniqueExeRel.replace('/', File.separatorChar))
+                            if (exeFile.exists()) {
+                                targetExe = exeFile
+                            }
+                        }
+                    }
+
+                    targetExe?.let { exeFile ->
+                        val outPng = File(exeFile.parentFile, exeFile.nameWithoutExtension + ".extracted.png")
+                        if (!outPng.exists() || outPng.lastModified() < exeFile.lastModified()) {
+                            if (ExeIconExtractor.tryExtractMainIconAsPng(exeFile, outPng)) {
+                                Timber.tag("CustomGameScanner").d("Extracted PNG icon for ${folder.name} from ${exeFile.name}")
+                                // Notify UI that icon is ready
+                                PluviaApp.events.emit(AndroidEvent.CustomGameImagesFetched(appId))
                             }
                         }
                     }
