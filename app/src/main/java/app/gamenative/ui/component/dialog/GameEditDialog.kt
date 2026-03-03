@@ -210,7 +210,7 @@ fun GameEditDialog(
         AppOptionMenuType.Container,
         AppOptionMenuType.CreateShortcut,
         AppOptionMenuType.ExportFrontend,
-        AppOptionMenuType.FetchSteamGridDBImages,
+        AppOptionMenuType.CustomImage,
         AppOptionMenuType.GetSupport
     )
     
@@ -464,7 +464,7 @@ fun GameEditDialog(
                                     AppOptionMenuType.Container,
                                     AppOptionMenuType.CreateShortcut,
                                     AppOptionMenuType.ExportFrontend,
-                                    AppOptionMenuType.FetchSteamGridDBImages,
+                                    AppOptionMenuType.CustomImage,
                                     AppOptionMenuType.GetSupport
                                 )
                                 

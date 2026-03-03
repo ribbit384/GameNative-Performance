@@ -78,6 +78,7 @@ import app.gamenative.ui.internal.fakeAppInfo
 import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.ListItemImage
 import app.gamenative.utils.CustomGameScanner
+import app.gamenative.utils.GameMetadataManager
 import java.io.File
 import timber.log.Timber
 
@@ -190,9 +191,24 @@ internal fun AppItem(
                 Box(
                     modifier = Modifier.clip(RoundedCornerShape(12.dp)),
                 ) {
+                    fun findCustomArtwork(): String? {
+                        val gameFolderPath = CustomGameScanner.getFolderPathFromAppId(appInfo.appId)
+                        if (gameFolderPath != null) {
+                            val metadata = GameMetadataManager.read(File(gameFolderPath))
+                            val customPath = metadata?.customImagePath
+                            if (!customPath.isNullOrEmpty()) {
+                                val file = File(customPath)
+                                if (file.exists()) {
+                                    return "file://$customPath?t=${file.lastModified()}"
+                                }
+                            }
+                        }
+                        return null
+                    }
+
                     if (paneType == PaneType.LIST) {
                         val iconUrl = remember(appInfo.appId, imageRefreshCounter) {
-                            if (appInfo.gameSource == GameSource.CUSTOM_GAME) {
+                            findCustomArtwork() ?: if (appInfo.gameSource == GameSource.CUSTOM_GAME) {
                                 val path = CustomGameScanner.findIconFileForCustomGame(context, appInfo.appId)
                                 if (!path.isNullOrEmpty()) {
                                     val file = File(path)
@@ -231,7 +247,7 @@ internal fun AppItem(
                         }
 
                         val imageUrl = remember(appInfo.appId, paneType, imageRefreshCounter) {
-                            when (appInfo.gameSource) {
+                            findCustomArtwork() ?: when (appInfo.gameSource) {
                                 GameSource.CUSTOM_GAME -> {
                                     when (paneType) {
                                         PaneType.GRID_CAPSULE -> {

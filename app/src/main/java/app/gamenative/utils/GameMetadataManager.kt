@@ -11,7 +11,8 @@ import org.json.JSONObject
 data class GameMetadata(
     val appId: Int,
     val steamgriddbFetched: Boolean = false,
-    val releaseDate: Long? = null
+    val releaseDate: Long? = null,
+    val customImagePath: String? = null
 )
 
 /**
@@ -58,11 +59,13 @@ object GameMetadataManager {
                 
                 val steamgriddbFetched = json.optBoolean("steamgriddbFetched", false)
                 val releaseDate = json.optLong("releaseDate", -1).takeIf { it > 0 }
+                val customImagePath = json.optString("customImagePath", null).takeIf { it?.isNotEmpty() == true }
                 
                 GameMetadata(
                     appId = appId,
                     steamgriddbFetched = steamgriddbFetched,
-                    releaseDate = releaseDate
+                    releaseDate = releaseDate,
+                    customImagePath = customImagePath
                 )
             } catch (e: Exception) {
                 // If not JSON, try parsing as plain integer (legacy format)
@@ -94,7 +97,8 @@ object GameMetadataManager {
                 GameMetadata(
                     appId = metadata.appId, // appId always takes precedence
                     steamgriddbFetched = metadata.steamgriddbFetched || existingMetadata.steamgriddbFetched,
-                    releaseDate = metadata.releaseDate ?: existingMetadata.releaseDate
+                    releaseDate = metadata.releaseDate ?: existingMetadata.releaseDate,
+                    customImagePath = metadata.customImagePath ?: existingMetadata.customImagePath
                 )
             } ?: metadata
             
@@ -106,10 +110,13 @@ object GameMetadataManager {
                 if (merged.releaseDate != null) {
                     put("releaseDate", merged.releaseDate)
                 }
+                if (merged.customImagePath != null) {
+                    put("customImagePath", merged.customImagePath)
+                }
             }
             
             gamenativeFile.writeText(json.toString())
-            Timber.tag("GameMetadataManager").d("Wrote metadata to ${gamenativeFile.absolutePath}: appId=${merged.appId}, fetched=${merged.steamgriddbFetched}, releaseDate=${merged.releaseDate}")
+            Timber.tag("GameMetadataManager").d("Wrote metadata to ${gamenativeFile.absolutePath}: appId=${merged.appId}, customImage=${merged.customImagePath}")
         } catch (e: Exception) {
             Timber.tag("GameMetadataManager").w(e, "Failed to write .gamenative file: ${gamenativeFile.absolutePath}")
         }
@@ -120,7 +127,7 @@ object GameMetadataManager {
      * If appId is not provided and no existing metadata exists, the update will fail.
      * For new metadata, use write() instead.
      */
-    fun update(folder: File, appId: Int? = null, steamgriddbFetched: Boolean? = null, releaseDate: Long? = null) {
+    fun update(folder: File, appId: Int? = null, steamgriddbFetched: Boolean? = null, releaseDate: Long? = null, customImagePath: String? = null) {
         val existing = read(folder)
         val finalAppId = appId ?: existing?.appId
         if (finalAppId == null) {
@@ -133,7 +140,8 @@ object GameMetadataManager {
         ).let { base ->
             base.copy(
                 steamgriddbFetched = steamgriddbFetched ?: existing?.steamgriddbFetched ?: false,
-                releaseDate = releaseDate ?: existing?.releaseDate
+                releaseDate = releaseDate ?: existing?.releaseDate,
+                customImagePath = customImagePath ?: existing?.customImagePath
             )
         }
         write(folder, updated)
