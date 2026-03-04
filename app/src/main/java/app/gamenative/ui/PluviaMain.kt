@@ -285,7 +285,7 @@ fun PluviaMain(
                                         onSuccess = viewModel::launchApp,
                                     )
                                 }
-                            } else if (PluviaApp.xEnvironment == null && isInitialLaunch) {
+                            } else if (PluviaApp.xEnvironment == null && (isInitialLaunch || navController.currentDestination?.route == PluviaScreen.LoginUser.route)) {
                                 Timber.i("Navigating to library")
                                 navController.navigate(PluviaScreen.Home.route)
 

@@ -1295,198 +1295,129 @@ internal fun LibraryFrontendPane(
                 },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Top Left Source Icon (Now Settings Button)
-            Box(modifier = Modifier.width(110.dp), contentAlignment = Alignment.CenterStart) {
-                val isSettingsFocused = isHeaderFocused && headerFocusIndex == 0
-                IconButton(
-                    onClick = {
-                        isHeaderFocused = true
-                        headerFocusIndex = 0
-                        onNavigateRoute("settings")
-                    },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .then(
-                            if (isSettingsFocused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                            else Modifier
-                        )
-                ) {
-                    focusedItem?.let { item ->
-                        val iconModifier = Modifier.size(28.dp).alpha(0.8f)
-                        when (item.gameSource) {
-                            GameSource.STEAM -> Icon(imageVector = Icons.Filled.Steam, contentDescription = "Steam", tint = Color.White, modifier = iconModifier)
-                            GameSource.EPIC -> Icon(painterResource(R.drawable.ic_epic), "Epic", tint = Color.White, modifier = iconModifier)
-                            GameSource.GOG -> Icon(painterResource(R.drawable.ic_gog), "GOG", tint = Color.White, modifier = iconModifier)
-                            GameSource.AMAZON -> Icon(imageVector = Icons.Filled.Amazon, contentDescription = "Amazon", tint = Color.White, modifier = iconModifier)
-                            GameSource.CUSTOM_GAME -> Icon(imageVector = Icons.Filled.CustomGame, contentDescription = "Custom", tint = Color.White, modifier = iconModifier)
-                        }
-                    } ?: run {
-                        Icon(Icons.Default.Settings, "Settings", tint = Color.White, modifier = Modifier.size(28.dp))
-                    }
-                }
-            }
-
-            // Separate Search Bar (between source icon and tabs)
-            Row(
-                modifier = Modifier
-                    .height(44.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                AnimatedVisibility(
-                    visible = isSearchingLocally,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    Surface(
-                        color = Color.White.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier
-                            .width(160.dp)
-                            .height(32.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp)
+            // Left Section (Settings + Search)
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Top Left Source Icon (Now Settings Button)
+                    Box(modifier = Modifier.width(60.dp), contentAlignment = Alignment.CenterStart) {
+                        val isSettingsFocused = isHeaderFocused && headerFocusIndex == 0
+                        IconButton(
+                            onClick = {
+                                isHeaderFocused = true
+                                headerFocusIndex = 0
+                                onNavigateRoute("settings")
+                            },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .then(
+                                    if (isSettingsFocused) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                    else Modifier
+                                )
                         ) {
-                            BasicTextField(
-                                value = state.searchQuery,
-                                onValueChange = { onSearchQuery(it) },
-                                textStyle = TextStyle(
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    shadow = headerTextShadow
-                                ),
-                                cursorBrush = SolidColor(Color.White),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .focusRequester(searchFocusRequester),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                                decorationBox = { innerTextField ->
-                                    if (state.searchQuery.isEmpty()) {
-                                        Text(
-                                            "Search...",
-                                            color = Color.White.copy(alpha = 0.5f),
-                                            fontSize = 13.sp,
-                                            style = TextStyle(shadow = headerTextShadow)
-                                        )
-                                    }
-                                    innerTextField()
+                            focusedItem?.let { item ->
+                                val iconModifier = Modifier.size(28.dp).alpha(0.8f)
+                                when (item.gameSource) {
+                                    GameSource.STEAM -> Icon(imageVector = Icons.Filled.Steam, contentDescription = "Steam", tint = Color.White, modifier = iconModifier)
+                                    GameSource.EPIC -> Icon(painterResource(R.drawable.ic_epic), "Epic", tint = Color.White, modifier = iconModifier)
+                                    GameSource.GOG -> Icon(painterResource(R.drawable.ic_gog), "GOG", tint = Color.White, modifier = iconModifier)
+                                    GameSource.AMAZON -> Icon(imageVector = Icons.Filled.Amazon, contentDescription = "Amazon", tint = Color.White, modifier = iconModifier)
+                                    GameSource.CUSTOM_GAME -> Icon(imageVector = Icons.Filled.CustomGame, contentDescription = "Custom", tint = Color.White, modifier = iconModifier)
                                 }
-                            )
+                            } ?: run {
+                                Icon(Icons.Default.Settings, "Settings", tint = Color.White, modifier = Modifier.size(28.dp))
+                            }
+                        }
+                    }
+
+                    // Separate Search Bar
+                    Row(
+                        modifier = Modifier
+                            .height(44.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            .padding(horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        AnimatedVisibility(
+                            visible = isSearchingLocally,
+                            enter = fadeIn(),
+                            exit = fadeOut()
+                        ) {
+                            Surface(
+                                color = Color.White.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier
+                                    .width(160.dp)
+                                    .height(32.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                ) {
+                                    BasicTextField(
+                                        value = state.searchQuery,
+                                        onValueChange = { onSearchQuery(it) },
+                                        textStyle = TextStyle(
+                                            color = Color.White,
+                                            fontSize = 13.sp,
+                                            shadow = headerTextShadow
+                                        ),
+                                        cursorBrush = SolidColor(Color.White),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .focusRequester(searchFocusRequester),
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                                        decorationBox = { innerTextField ->
+                                            if (state.searchQuery.isEmpty()) {
+                                                Text(
+                                                    "Search...",
+                                                    color = Color.White.copy(alpha = 0.5f),
+                                                    fontSize = 13.sp,
+                                                    style = TextStyle(shadow = headerTextShadow)
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            isSearchingLocally = false
+                                            onSearchQuery("")
+                                        },
+                                        modifier = Modifier.size(16.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!isSearchingLocally) {
+                            val isSearchFocused = isHeaderFocused && headerFocusIndex == 1
                             IconButton(
                                 onClick = {
-                                    isSearchingLocally = false
-                                    onSearchQuery("")
+                                    isHeaderFocused = true
+                                    headerFocusIndex = 1
+                                    isSearchingLocally = true
+                                    coroutineScope.launch {
+                                        delay(100)
+                                        searchFocusRequester.requestFocus()
+                                    }
                                 },
-                                modifier = Modifier.size(16.dp)
-                            ) {
-                                Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                            }
-                        }
-                    }
-                }
-
-                if (!isSearchingLocally) {
-                    val isSearchFocused = isHeaderFocused && headerFocusIndex == 1
-                    IconButton(
-                        onClick = {
-                            isHeaderFocused = true
-                            headerFocusIndex = 1
-                            isSearchingLocally = true
-                            coroutineScope.launch {
-                                delay(100)
-                                searchFocusRequester.requestFocus()
-                            }
-                        },
-                        modifier = Modifier
-                            .size(32.dp)
-                            .then(
-                                if (isSearchFocused) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                                else Modifier
-                            )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // L1 badge (outside central pill)
-            if (connectedControllerType != ControllerType.NONE) {
-                ControllerBadge(
-                    button = "L1",
-                    controllerType = connectedControllerType,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-            }
-
-            // Central Pill Backdrop for Tabs only (Adaptive)
-            Row(
-                modifier = Modifier
-                    .height(44.dp)
-                    .background(
-                        Color.Black.copy(alpha = 0.5f),
-                        CircleShape
-                    )
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // TABS
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    // Each tab is exactly 100dp to prevent wrapping "Downloads"
-                    val tabWidth = 100.dp
-
-                    Box(
-                        modifier = Modifier
-                            .widthIn(max = tabWidth * 4) // Show max 4 tabs, wrap if fewer
-                            .height(44.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        ScrollableTabRow(
-                            selectedTabIndex = selectedTabIdx,
-                            containerColor = Color.Transparent,
-                            divider = {},
-                            edgePadding = 0.dp,
-                            indicator = { tabPositions ->
-                                if (selectedTabIdx < tabPositions.size) {
-                                    TabRowDefaults.PrimaryIndicator(
-                                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIdx]),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        height = 2.dp
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .then(
+                                        if (isSearchFocused) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                        else Modifier
                                     )
-                                }
-                            }
-                        ) {
-                            tabs.forEachIndexed { index, tab ->
-                                Tab(
-                                    selected = selectedTabIdx == index,
-                                    onClick = { selectedTabIdx = index },
-                                    text = {
-                                        Text(
-                                            text = tab.label,
-                                            fontSize = 14.sp,
-                                            fontWeight = if (selectedTabIdx == index) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (selectedTabIdx == index) Color.White else Color.White.copy(alpha = 0.6f),
-                                            style = TextStyle(shadow = headerTextShadow),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Visible
-                                        )
-                                    },
-                                    modifier = Modifier.width(tabWidth).height(44.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -1494,23 +1425,89 @@ internal fun LibraryFrontendPane(
                 }
             }
 
-            // R1 badge (outside central pill)
-            if (connectedControllerType != ControllerType.NONE) {
-                ControllerBadge(
-                    button = "R1",
-                    controllerType = connectedControllerType,
-                    modifier = Modifier.padding(start = 4.dp)
-                )
+            // Center Section (L1 + Tabs + R1)
+            Box(modifier = Modifier.weight(2f), contentAlignment = Alignment.Center) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // L1 badge
+                    if (connectedControllerType != ControllerType.NONE) {
+                        ControllerBadge(
+                            button = "L1",
+                            controllerType = connectedControllerType,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                    }
+
+                    // Central Pill Backdrop for Tabs only (Adaptive)
+                    Row(
+                        modifier = Modifier
+                            .height(44.dp)
+                            .background(
+                                Color.Black.copy(alpha = 0.5f),
+                                CircleShape
+                            )
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // TABS
+                        val tabWidth = 100.dp
+                        val displayTabCount = tabs.size.coerceAtMost(6)
+
+                        Box(
+                            modifier = Modifier
+                                .width(tabWidth * displayTabCount)
+                                .height(44.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            ScrollableTabRow(
+                                selectedTabIndex = selectedTabIdx,
+                                containerColor = Color.Transparent,
+                                divider = {},
+                                edgePadding = 0.dp,
+                                indicator = { tabPositions ->
+                                    if (selectedTabIdx < tabPositions.size) {
+                                        TabRowDefaults.PrimaryIndicator(
+                                            modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTabIdx]),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            height = 2.dp
+                                        )
+                                    }
+                                }
+                            ) {
+                                tabs.forEachIndexed { index, tab ->
+                                    Tab(
+                                        selected = selectedTabIdx == index,
+                                        onClick = { selectedTabIdx = index },
+                                        text = {
+                                            Text(
+                                                text = tab.label,
+                                                fontSize = 14.sp,
+                                                fontWeight = if (selectedTabIdx == index) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (selectedTabIdx == index) Color.White else Color.White.copy(alpha = 0.6f),
+                                                style = TextStyle(shadow = headerTextShadow),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Visible
+                                            )
+                                        },
+                                        modifier = Modifier.width(tabWidth).height(44.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // R1 badge
+                    if (connectedControllerType != ControllerType.NONE) {
+                        ControllerBadge(
+                            button = "R1",
+                            controllerType = connectedControllerType,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-            
-            // Top Right Game Settings Button (Outside central pill)
-            Row(
-                modifier = Modifier.width(110.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
-            ) {
+            // Right Section (Game Menu)
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                 if (focusedItem != null) {
                     val isGameMenuFocused = isHeaderFocused && headerFocusIndex == 2
                     IconButton(

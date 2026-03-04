@@ -929,17 +929,26 @@ class LibraryViewModel @Inject constructor(
         DownloadQueueManager.removeFromQueue(appId)
 
         if (appId.startsWith("STEAM_")) {
-            val info = SteamService.getAppDownloadInfo(appId.removePrefix("STEAM_").toInt())
-            info?.cancel()
+            val bareId = appId.removePrefix("STEAM_").toInt()
+            viewModelScope.launch(Dispatchers.IO) {
+                SteamService.deleteApp(bareId)
+            }
         } else if (appId.startsWith("EPIC_")) {
-            val info = app.gamenative.service.epic.EpicService.getDownloadInfo(appId.removePrefix("EPIC_").toInt())
-            info?.cancel()
+            val bareId = appId.removePrefix("EPIC_").toInt()
+            viewModelScope.launch(Dispatchers.IO) {
+                app.gamenative.service.epic.EpicService.deleteGame(context, bareId)
+            }
         } else if (appId.startsWith("GOG_")) {
-            val info = app.gamenative.service.gog.GOGService.getDownloadInfo(appId.removePrefix("GOG_"))
-            info?.cancel()
+            val bareId = appId.removePrefix("GOG_")
+            viewModelScope.launch(Dispatchers.IO) {
+                val game = _state.value.gogItems.find { it.appId == appId } ?: return@launch
+                app.gamenative.service.gog.GOGService.deleteGame(context, game)
+            }
         } else if (appId.startsWith("AMAZON_")) {
-            val info = AmazonService.getDownloadInfo(appId.removePrefix("AMAZON_"))
-            info?.cancel()
+            val bareId = appId.removePrefix("AMAZON_")
+            viewModelScope.launch(Dispatchers.IO) {
+                app.gamenative.service.amazon.AmazonService.deleteGame(context, bareId)
+            }
         }
         updateActiveDownloads()
     }
