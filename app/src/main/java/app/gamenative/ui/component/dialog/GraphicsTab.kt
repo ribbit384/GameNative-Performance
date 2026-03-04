@@ -75,12 +75,14 @@ fun GraphicsTabContent(state: ContainerConfigState) {
                 value = state.graphicsDriverIndex.value,
                 items = state.graphicsDrivers.value,
                 onItemSelected = {
+                    val oldDriver = state.config.value.graphicsDriver
+                    val newDriver = StringUtils.parseIdentifier(state.graphicsDrivers.value[it])
                     state.graphicsDriverIndex.value = it
-                    state.graphicsDriverVersionIndex.value = 0
-                    state.config.value = state.config.value.copy(
-                        graphicsDriver = StringUtils.parseIdentifier(state.graphicsDrivers.value[it]),
-                        graphicsDriverVersion = "",
-                    )
+                    if (oldDriver != newDriver) {
+                        state.config.value = state.config.value.copy(
+                            graphicsDriver = newDriver
+                        )
+                    }
                 },
             )
             SettingsListDropdown(

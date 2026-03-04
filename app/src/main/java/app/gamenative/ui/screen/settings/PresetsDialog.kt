@@ -1,48 +1,59 @@
 package app.gamenative.ui.screen.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import app.gamenative.R
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import app.gamenative.ui.component.dialog.Box64PresetsDialog
 import app.gamenative.ui.component.dialog.ContainerConfigDialog
 import app.gamenative.ui.component.dialog.FEXCorePresetsDialog
-import app.gamenative.ui.theme.settingsTileColors
+import app.gamenative.ui.component.dialog.LoadingDialog
 import app.gamenative.utils.ContainerUtils
-import com.alorma.compose.settings.ui.SettingsMenuLink
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun PresetsDialog(open: Boolean, onDismiss: () -> Unit) {
     if (!open) return
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
     var showConfigDialog by rememberSaveable { mutableStateOf(false) }
     var showBox64PresetsDialog by rememberSaveable { mutableStateOf(false) }
     var showFexcorePresetsDialog by rememberSaveable { mutableStateOf(false) }
     var isSavingConfig by rememberSaveable { mutableStateOf(false) }
+
+    val sidebarScrollState = rememberScrollState()
+    val scrollState = rememberScrollState()
 
     if (showConfigDialog) {
         ContainerConfigDialog(
@@ -53,7 +64,7 @@ fun PresetsDialog(open: Boolean, onDismiss: () -> Unit) {
             onDismissRequest = { showConfigDialog = false },
             onSave = { config ->
                 isSavingConfig = true
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                scope.launch(Dispatchers.IO) {
                     try {
                         ContainerUtils.setDefaultContainerData(config)
                     } finally {
@@ -65,10 +76,10 @@ fun PresetsDialog(open: Boolean, onDismiss: () -> Unit) {
         )
     }
 
-    app.gamenative.ui.component.dialog.LoadingDialog(
+    LoadingDialog(
         visible = isSavingConfig,
         progress = -1f,
-        message = androidx.compose.ui.res.stringResource(app.gamenative.R.string.settings_saving_restarting)
+        message = stringResource(R.string.settings_saving_restarting)
     )
 
     if (showBox64PresetsDialog) {
@@ -87,68 +98,83 @@ fun PresetsDialog(open: Boolean, onDismiss: () -> Unit) {
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.9f),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Presets",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                HorizontalDivider()
-
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SettingsMenuLink(
-                        colors = settingsTileColors(),
-                        title = { Text(text = "Default Settings") },
-                        subtitle = { Text(text = stringResource(R.string.settings_emulation_default_config_subtitle)) },
-                        onClick = { showConfigDialog = true },
-                    )
-                    SettingsMenuLink(
-                        colors = settingsTileColors(),
-                        title = { Text(text = stringResource(R.string.settings_emulation_box64_presets_title)) },
-                        subtitle = { Text(stringResource(R.string.settings_emulation_box64_presets_subtitle)) },
-                        onClick = { showBox64PresetsDialog = true },
-                    )
-                    SettingsMenuLink(
-                        colors = settingsTileColors(),
-                        title = { Text(text = stringResource(R.string.fexcore_presets)) },
-                        subtitle = { Text(text = stringResource(R.string.fexcore_presets_description)) },
-                        onClick = { showFexcorePresetsDialog = true },
-                    )
-                }
-
-                HorizontalDivider()
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text("Close")
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0A0A))) {
+            // HEADER
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+                    .align(Alignment.TopCenter)
+                    .zIndex(2f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .shadow(8.dp, CircleShape)
+                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
                     }
                 }
+
+                Box(modifier = Modifier.weight(2f), contentAlignment = Alignment.Center) {
+                    Surface(
+                        modifier = Modifier.height(44.dp),
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape
+                    ) {
+                        Box(modifier = Modifier.padding(horizontal = 24.dp), contentAlignment = Alignment.Center) {
+                            Text("Presets Manager", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Box(modifier = Modifier.weight(1f))
+            }
+
+            // CONTENT
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 72.dp, start = 24.dp, end = 24.dp, bottom = 24.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(24.dp))
+                    .verticalScroll(scrollState)
+                    .padding(24.dp)
+            ) {
+                Text(
+                    text = "Global Emulation Presets",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+
+                SettingsTile(
+                    title = "Default Settings",
+                    subtitle = "Configure global container defaults",
+                    icon = Icons.Default.Settings,
+                    onClick = { showConfigDialog = true }
+                )
+                Spacer(Modifier.height(12.dp))
+                SettingsTile(
+                    title = "Box64 Presets",
+                    subtitle = "Manage Box64 dynarec profiles",
+                    icon = Icons.Default.Terminal,
+                    onClick = { showBox64PresetsDialog = true }
+                )
+                Spacer(Modifier.height(12.dp))
+                SettingsTile(
+                    title = "FEXCore Presets",
+                    subtitle = "Manage FEXCore emulation profiles",
+                    icon = Icons.Default.Bolt,
+                    onClick = { showFexcorePresetsDialog = true }
+                )
             }
         }
     }
