@@ -120,6 +120,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -243,35 +244,10 @@ fun ContainerConfigScreen(
     val containerVariants = stringArrayResource(R.array.container_variant_entries).toList()
     val bionicWineEntriesBase = stringArrayResource(R.array.bionic_wine_entries).toList()
     val glibcWineEntriesBase = stringArrayResource(R.array.glibc_wine_entries).toList()
-    val bionicWineEntriesRef = remember { mutableStateOf(bionicWineEntriesBase) }
-    var bionicWineEntries by bionicWineEntriesRef
-    val glibcWineEntriesRef = remember { mutableStateOf(glibcWineEntriesBase) }
-    var glibcWineEntries by glibcWineEntriesRef
     val emulatorEntries = stringArrayResource(R.array.emulator_entries).toList()
     val bionicGraphicsDrivers = stringArrayResource(R.array.bionic_graphics_driver_entries).toList()
     val baseWrapperVersions = stringArrayResource(R.array.wrapper_graphics_driver_version_entries).toList()
-    val wrapperVersionsRef = remember { mutableStateOf(baseWrapperVersions) }
-    var wrapperVersions by wrapperVersionsRef
-    val dxvkVersionsAllRef = remember { mutableStateOf(dxvkVersionsBase) }
-    var dxvkVersionsAll by dxvkVersionsAllRef
-    val componentAvailabilityRef = remember { mutableStateOf<ManifestComponentHelper.ComponentAvailability?>(null) }
-    var componentAvailability by componentAvailabilityRef
-    var manifestInstallInProgress by remember { mutableStateOf(false) }
-    var showManifestDownloadDialog by remember { mutableStateOf(false) }
-    var manifestDownloadProgress by remember { mutableStateOf(-1f) }
-    var manifestDownloadLabel by remember { mutableStateOf("") }
-    var manifestDownloadStage by remember { mutableStateOf("") }
-    var versionsLoaded by remember { mutableStateOf(false) }
-    val showCustomResolutionDialogRef = remember { mutableStateOf(false) }
-    var showCustomResolutionDialog by showCustomResolutionDialogRef
-    val customResolutionValidationErrorRef = remember { mutableStateOf<String?>(null) }
-    var customResolutionValidationError by customResolutionValidationErrorRef
-
-    LaunchedEffect(Unit) {
-        showCustomResolutionDialog = false
-        customResolutionValidationError = null
-    }
-
+    
     val languages = listOf(
         "arabic", "bulgarian", "schinese", "tchinese", "czech", "danish", "dutch",
         "english", "finnish", "french", "german", "greek", "hungarian", "italian",
@@ -279,9 +255,35 @@ fun ContainerConfigScreen(
         "romanian", "russian", "spanish", "latam", "swedish", "thai", "turkish",
         "ukrainian", "vietnamese"
     )
+
+    // PRE-LOAD synchronously to avoid flash
+    val initialAvailability = remember { runBlocking(Dispatchers.IO) { ManifestComponentHelper.loadComponentAvailability(context) } }
+    val componentAvailabilityRef = remember { mutableStateOf<ManifestComponentHelper.ComponentAvailability?>(initialAvailability) }
+    var componentAvailability by componentAvailabilityRef
+    
     val availability = componentAvailability
-    val manifestData = availability?.manifest ?: ManifestData.empty()
     val installedLists = availability?.installed
+    val manifestData = availability?.manifest ?: ManifestData.empty()
+
+    val dxvkVersionsAllRef = remember { mutableStateOf((dxvkVersionsBase + (installedLists?.dxvk ?: emptyList())).distinct()) }
+    var dxvkVersionsAll by dxvkVersionsAllRef
+    val bionicWineEntriesRef = remember { mutableStateOf((bionicWineEntriesBase + (installedLists?.proton ?: emptyList()) + (installedLists?.wine ?: emptyList())).distinct()) }
+    var bionicWineEntries by bionicWineEntriesRef
+    val glibcWineEntriesRef = remember { mutableStateOf(glibcWineEntriesBase) }
+    var glibcWineEntries by glibcWineEntriesRef
+    val wrapperVersionsRef = remember { mutableStateOf((baseWrapperVersions + (availability?.installedDrivers ?: emptyList())).distinct()) }
+    var wrapperVersions by wrapperVersionsRef
+
+    var manifestInstallInProgress by remember { mutableStateOf(false) }
+    var showManifestDownloadDialog by remember { mutableStateOf(false) }
+    var manifestDownloadProgress by remember { mutableStateOf(-1f) }
+    var manifestDownloadLabel by remember { mutableStateOf("") }
+    var manifestDownloadStage by remember { mutableStateOf("") }
+    var versionsLoaded by remember { mutableStateOf(availability != null) }
+    val showCustomResolutionDialogRef = remember { mutableStateOf(false) }
+    var showCustomResolutionDialog by showCustomResolutionDialogRef
+    val customResolutionValidationErrorRef = remember { mutableStateOf<String?>(null) }
+    var customResolutionValidationError by customResolutionValidationErrorRef
 
     val isBionicVariant = config.containerVariant.equals(Container.BIONIC, ignoreCase = true)
     val manifestDownloadMessage = if (manifestDownloadStage.isNotEmpty() && manifestDownloadLabel.isNotEmpty()) {
@@ -346,15 +348,17 @@ fun ContainerConfigScreen(
     suspend fun refreshInstalledLists() {
         val availabilityUpdated = ManifestComponentHelper.loadComponentAvailability(context)
         componentAvailability = availabilityUpdated
-        val installed = availabilityUpdated.installed
+        val inst = availabilityUpdated.installed
         wrapperVersions = (baseWrapperVersions + availabilityUpdated.installedDrivers).distinct()
-        bionicWineEntries = (bionicWineEntriesBase + installed.proton + installed.wine).distinct()
-        glibcWineEntries = glibcWineEntriesBase
+        bionicWineEntries = (bionicWineEntriesBase + inst.proton + inst.wine).distinct()
+        dxvkVersionsAll = (dxvkVersionsBase + inst.dxvk).distinct()
     }
 
     LaunchedEffect(Unit) {
-        refreshInstalledLists()
-        versionsLoaded = true
+        if (availability == null) {
+            refreshInstalledLists()
+            versionsLoaded = true
+        }
     }
 
     fun launchManifestInstall(
@@ -696,7 +700,7 @@ fun ContainerConfigScreen(
 
     val audioDriverIndexRef = rememberSaveable {
         val driverIndex = audioDrivers.indexOfFirst { StringUtils.parseIdentifier(it) == config.audioDriver }
-        mutableIntStateOf(if (driverIndex >= 0) driverIndex else 0)
+        mutableIntStateOf(if (driverIndex >= 0) driverIndex else audioDrivers.indexOfFirst { it.lowercase().contains("pulse") }.coerceAtLeast(0))
     }
     var audioDriverIndex by audioDriverIndexRef
     val gpuNameIndexRef = rememberSaveable {

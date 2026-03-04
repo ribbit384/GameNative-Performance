@@ -212,7 +212,7 @@ fun GeneralTabContent(
                 },
             )
             if (config.containerVariant.equals(Container.BIONIC, ignoreCase = true)) {
-                val wineIndex = state.bionicWineOptions.ids.indexOfFirst { it == config.wineVersion }.coerceAtLeast(0)
+                val wineIndex = state.bionicWineOptions.ids.indexOf(config.wineVersion).coerceAtLeast(0)
                 SettingsListDropdown(
                     colors = settingsTileColors(),
                     title = { Text(text = stringResource(R.string.wine_version)) },
@@ -235,6 +235,27 @@ fun GeneralTabContent(
                             return@SettingsListDropdown
                         }
                         state.config.value = config.copy(wineVersion = selectedId.ifEmpty { state.bionicWineOptions.labels[idx] })
+                    },
+                )
+            } else if (config.containerVariant.equals(Container.GLIBC, ignoreCase = true)) {
+                val wineIndex = state.glibcWineOptions.ids.indexOf(config.wineVersion).coerceAtLeast(0)
+                SettingsListDropdown(
+                    colors = settingsTileColors(),
+                    title = { Text(text = stringResource(R.string.wine_version)) },
+                    value = wineIndex,
+                    items = state.glibcWineOptions.labels,
+                    itemMuted = state.glibcWineOptions.muted,
+                    onItemSelected = { idx ->
+                        val selectedId = state.glibcWineOptions.ids.getOrNull(idx).orEmpty()
+                        val isManifestNotInstalled = state.glibcWineOptions.muted.getOrNull(idx) == true
+                        val manifestEntry = state.glibcWineManifestById[selectedId]
+                        if (isManifestNotInstalled && manifestEntry != null) {
+                            state.launchManifestContentInstall(manifestEntry, ContentProfile.ContentType.CONTENT_TYPE_WINE) {
+                                state.config.value = config.copy(wineVersion = selectedId)
+                            }
+                            return@SettingsListDropdown
+                        }
+                        state.config.value = config.copy(wineVersion = selectedId.ifEmpty { state.glibcWineOptions.labels[idx] })
                     },
                 )
             }
