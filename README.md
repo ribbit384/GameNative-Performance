@@ -1,53 +1,59 @@
-# GameNative-Performance
+# GameNative-Performance (GNP)
 
-GameNative-Performance is a high-performance fork of GameNative, optimized specifically for Adreno-powered devices (Snapdragon 8 Gen 1/2/3/Elite). It introduces aggressive clock management, internal file system access, and robust save game portability.
+[![Join Discord](https://img.shields.io/badge/Join%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/KWc5h7GZTK)
 
-## New Features (Performance Variant)
+**GameNative-Performance** is a high-performance, quality-of-life focused fork of [GameNative Official](https://github.com/utkarshdalal/GameNative). While we build upon the incredible foundation laid by the GameNative team, GNP strives to provide a more refined, efficient, and performance-oriented experience for Adreno-powered devices.
 
-### 🚀 Hardware Performance Optimization
-- **Force Maximum Clocks (Non-Root):** Integrated loop detection via Adreno Tools that re-applies maximum GPU clock requests every 5 seconds to prevent system downclocking.
-- **Root Maximum Performance:** For rooted users, an aggressive **500ms loop** that monitors hardware nodes and instantly rewrites GPU registers if a frequency drop is detected.
-- **Aggressive Power Profiles:** Forces Adreno power levels to 0 (Maximum) and disables GPU "napping" to maintain peak FPS in demanding titles.
-- **Fuzzy GPU Node Detection:** Automatically identifies and targets device-specific clock nodes (e.g., hitting 1200MHz on Adreno 840).
+---
 
-### 📂 Advanced File Management
-- **Embedded File Explorer:** A full-screen internal file manager with Multi-select, Copy, Cut, Paste, and Delete capabilities. Access `/data/data/app.gamenative` without needing root.
-- **GNP Documents Provider:** Exposes the app's internal data directory to external file managers (Solid Explorer, ZArchiver, etc.), making it easy to sideload patches or manually manage data.
-- **Enhanced Save Portability:** 
-    - **Robust Export:** Packages saves into a standardized `drive_c/` structure with proactive user remapping.
-    - **Fuzzy Import:** Intelligent "fuzzy" matching for game titles that ignores spaces/special characters, ensuring saves land in the correct folder even if the ZIP name differs.
-    - **Cross-User Compatibility:** Automatically remaps legacy `steamuser` paths to `xuser` for seamless migration from other Winlator/GameHub forks.
+## 🌟 Key Features & Quality of Life
 
-### 🛠️ Stability & UX Fixes
-- **Async Root Checks:** Root verification no longer freezes the UI; it runs on a background thread with a 5-second safety timeout.
-- **Cleaned UI:** Refactored Graphics Settings to remove duplicate VKD3D and DX Wrapper entries, providing a cleaner, more intuitive interface.
-- **Error Resilience:** Added extensive try-catch wrapping around native performance calls to ensure the app remains stable on all Android versions.
+### 📦 Efficiency & Storage
+- **Master Containers:** Drastically reduce the application's storage footprint. Instead of creating a unique container for every game, "Master Containers" allow multiple games to share a single, optimized container environment.
+- **Unified Download Manager:** A native, robust download system supporting **Custom Download Paths** for all integrated stores: **Steam, Epic, GOG, and Amazon**.
 
-## How to Use
-1. Download the latest release from the Releases.
-2. Install the APK on your Android device.
-3. Configure your container in **Settings -> Graphics** to enable performance toggles and select Driver.
-4. Access internal files via **Settings -> Debug -> Embedded File Access**.
+### 🎮 Controller-First Experience
+- **New Controller-Friendly UI & Menus:** A complete overhaul of the interface designed specifically for handhelds and gamepads. Navigate your entire library and settings without ever touching the screen.
+- **Enhanced Multi-Controller Support:** Stable local multiplayer for up to **4 Players** with improved mapping and 'coffincolors' controller fixes.
+- **Stretch To Fullscreen:** Native support for various aspect ratios, ensuring your games fill the screen on modern mobile devices.
+- **No Login Requirement:** Mandatory accounts have been removed. Use the full power of the app instantly; login is now optional and found in settings.
 
-## Support
-To report issues or receive support, join our community!
+### 🚀 Performance & Backend (The Powerhouse)
+- **80% Ludashi 2.9 Backend:** Integrated core logic and stability improvements from the Ludashi 2.9 project.
+- **StevenMXZ Integrations:**
+    - **Native Rendering:** Leveraging advanced rendering techniques for improved visual fidelity and lower overhead.
+    - **Screen Effects:** High-quality post-processing and visual filters directly from Ludashi 2.9.
+    - **File Redirect Hooks:** Specialized Bionic/Glibc hooks for seamless path remapping and performance.
+- **Alsa-Reflector Integration:** Powered by **CoffinColors**, providing low-latency, high-fidelity audio reflection for a superior sound experience.
+- **Adreno-Specific Tuning:** Optimized for Snapdragon 8 Gen 1/2/3 and 8 Elite with smart power management and specialized Turnip driver variants.
 
-[![](https://img.shields.io/badge/Join%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/fHX2jFUWdP)
+---
 
-## Building
-1. Open in Android Studio.
-2. Requires **Android SDK 35** and **OpenJDK 17**.
-3. Use `./gradlew assembleDebug` to build the performance variant.
+## 🤝 Credits & Acknowledgments
 
-## License
-[GPL 3.0](https://github.com/maxjivi05/GameNative-Performance/blob/master/LICENSE)
+GNP is a community-driven effort that stands on the shoulders of giants. We give full credit to the original creators and the developers whose work we've integrated:
 
-## Credits
-1. **Winlator Teams** yes all of them from the Original **Bruno** Builds to CMOD Builds by **CoffinColors** and the Ludashi Builds from **StevenMXZ**.
-2. **GameNative Development Team** which is rather large but most of the source here is directly from their hard work and most of the credit goes out to them for their dedication and ever growing team of developers. ( Yes, I steal your open source code and modify it ) thank you.
-3. **Box64**, **Fex-Emu**, **DXVK**, **DXVK Gplasync**, **VKD3D**, **VKD3D-Proton**, **Mesa**, Basically everyone who has any piece of software that we use and if I forgot to mention a component let me know and I'll give you credit where credit is due.
+- **GameNative Official:** Our foundational base. We are a fork that strives to provide more QoL fixes and performance while respecting and building upon their incredible dedication.
+- **StevenMXZ (Ludashi 2.9):** For the Native Rendering, Screen Effects, and the robust backend logic that powers our core.
+- **CoffinColors:** For the Alsa-Reflector integration and essential controller stability fixes.
+- **Winlator Teams:** Credit to all contributors, from the original **Bruno** builds to the various community-led forks that have pushed the scene forward.
+- **Core Components:** **Box64**, **Fex-Emu**, **DXVK (Gplasync)**, **VKD3D-Proton**, and the **Mesa/Turnip** contributors.
 
-## Thank You
-I'd like to thank everyone who recommends new features and helps bug test new features, builds and ensure stability on Discord.
+---
 
-**Disclaimer: This software is intended for playing games that you legally own. Do not use this software for piracy. The maintainer assumes no responsibility for misuse.**
+## 🚀 Getting Started
+
+1. **Download:** Grab the latest debug APK from the Actions or Releases tab.
+2. **Install:** Sideload onto your Adreno-powered Android device.
+3. **Configure:** Head to **Settings** to enable Master Containers and set your custom download paths.
+4. **Play:** Experience your PC library with maximum performance and a modern UI.
+
+### 🏗️ Building from Source
+```bash
+./gradlew assembleDebug
+```
+*Requires Android SDK 35 and OpenJDK 17.*
+
+---
+
+**Disclaimer:** *GameNative-Performance is intended for playing legally owned software. We do not condone or support piracy. Use responsibly.*
