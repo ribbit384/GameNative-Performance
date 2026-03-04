@@ -368,9 +368,9 @@ private fun GenericComponentContent(comp: GNComponent, mgr: ContentsManager, isB
     }
 
     val componentTypes = when(comp) {
-        GNComponent.DXVK -> listOf("All", "Stable", "Gplasync", "Sarek", "NVAPI", "Nightly", "Arm64EC")
-        GNComponent.VKD3D -> listOf("All", "Stable", "Nightly", "Arm64EC")
-        GNComponent.BOX64 -> listOf("All", "Stable", "Nightly", "Bionic")
+        GNComponent.DXVK -> listOf("All", "Stable", "Gplasync", "NVAPI", "Sarek", "Arm64EC", "x86_64", "Nightly")
+        GNComponent.VKD3D -> listOf("All", "Stable", "Arm64EC", "x86_64", "Nightly")
+        GNComponent.BOX64 -> listOf("All", "Stable", "Bionic", "Nightly")
         GNComponent.WOWBOX64 -> listOf("All", "Stable", "Nightly")
         GNComponent.FEXCORE -> listOf("All", "Stable", "Nightly")
         else -> listOf("All")
@@ -447,16 +447,23 @@ private fun GenericComponentContent(comp: GNComponent, mgr: ContentsManager, isB
                 val name = asset.name.lowercase()
                 val rel = asset.releaseName.lowercase()
                 val isNightly = name.contains("nightly", true) || name.contains("pre-reg", true) || rel.contains("nightly", true) || rel.contains("pre-reg", true)
+                val isArm64EC = name.contains("arm64ec", true)
+                val isNVAPI = name.contains("nvapi", true)
+                val isGplasync = name.contains("gplasync", true)
+                val isBionic = name.contains("bionic", true)
+                val isSarek = name.contains("sarek", true)
+                val isX86_64 = name.contains("x86_64", true) || (!isArm64EC && (name.contains("standard", true) || name.contains("proton", true) || name.contains("dxvk", true)))
 
                 when (selectedType) {
                     "All" -> true
                     "Nightly" -> isNightly
+                    "Arm64EC" -> isArm64EC
+                    "NVAPI" -> isNVAPI
+                    "x86_64" -> isX86_64 && !isArm64EC
+                    "Gplasync" -> isGplasync && !isArm64EC && !isNVAPI
                     "Stable" -> !isNightly && (name.contains("stable", true) || rel.contains("stable", true))
-                    "Gplasync" -> !isNightly && (name.contains("gplasync", true) || rel.contains("gplasync", true)) && !name.contains("arm64ec") && !name.contains("nvapi")
-                    "Arm64EC" -> !isNightly && name.contains("arm64ec") && !name.contains("gplasync") && !name.contains("nvapi")
-                    "NVAPI" -> !isNightly && name.contains("nvapi") && !name.contains("arm64ec") && !name.contains("gplasync")
-                    "Sarek" -> !isNightly && name.contains("sarek", true)
-                    "Bionic" -> !isNightly && name.contains("bionic", true)
+                    "Sarek" -> isSarek
+                    "Bionic" -> isBionic
                     else -> !isNightly && (asset.name.contains(selectedType, ignoreCase = true) || asset.releaseName.contains(selectedType, ignoreCase = true))
                 }
             }
