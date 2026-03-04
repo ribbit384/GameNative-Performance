@@ -324,36 +324,59 @@ private fun GenericComponentContent(comp: GNComponent, mgr: ContentsManager, isB
     var isLoading by remember { mutableStateOf(true) }
     val installedProfiles = remember { mutableStateListOf<ContentProfile>() }
     var selectedFilter by rememberSaveable { mutableStateOf("Download") }
-    
+    var selectedType by rememberSaveable { mutableStateOf("All") }
+    var typeDropdownExpanded by remember { mutableStateOf(false) }
+
     val refresh: () -> Unit = {
         scope.launch(Dispatchers.IO) {
             mgr.syncContents()
             val list = mutableListOf<ContentProfile>()
-            comp.getContentTypes().forEach { type -> mgr.getProfiles(type)?.let { list.addAll(it) } }
-            withContext(Dispatchers.Main) { installedProfiles.clear(); installedProfiles.addAll(list) }
+            comp.getContentTypes().forEach { type ->
+                val profiles = mgr.getProfiles(type)
+                if (profiles != null) list.addAll(profiles)
+            }
+            withContext(Dispatchers.Main) {
+                installedProfiles.clear()
+                installedProfiles.addAll(list)
+            }
         }
     }
 
     LaunchedEffect(comp) {
         refresh()
         isLoading = true
+        selectedType = "All"
         withContext(Dispatchers.IO) {
             try {
                 val req = Request.Builder().url("https://api.github.com/repos/Xnick417x/Winlator-Bionic-Nightly-wcp/releases?per_page=100").header("Accept", "application/vnd.github.v3+json").build()
                 Net.http.newCall(req).execute().use { resp ->
                     if (resp.isSuccessful) {
                         val all = parseGHReleases(resp.body?.string() ?: "[]")
-                        val prefixes = nightlyPrefixes[comp] ?: emptyList()
-                        withContext(Dispatchers.Main) { releases = all.filter { rel -> prefixes.any { rel.tagName.startsWith(it) } } }
+                        val nPrefixes = nightlyPrefixes[comp] ?: emptyList()
+                        val sPrefixes = stablePrefixes[comp] ?: emptyList()
+                        withContext(Dispatchers.Main) { 
+                            releases = all.filter { rel -> 
+                                (nPrefixes + sPrefixes).any { prefix -> rel.tagName.contains(prefix, true) || rel.assets.any { it.name.contains(prefix, true) } }
+                            } 
+                        }
                     }
                 }
             } catch (e: Exception) { Timber.e(e) } finally { withContext(Dispatchers.Main) { isLoading = false } }
         }
     }
 
+    val componentTypes = when(comp) {
+        GNComponent.DXVK -> listOf("All", "Stable", "Gplasync", "Sarek", "NVAPI", "Nightly", "Arm64EC")
+        GNComponent.VKD3D -> listOf("All", "Stable", "Nightly", "Arm64EC")
+        GNComponent.BOX64 -> listOf("All", "Stable", "Nightly", "Bionic")
+        GNComponent.WOWBOX64 -> listOf("All", "Stable", "Nightly")
+        GNComponent.FEXCORE -> listOf("All", "Stable", "Nightly")
+        else -> listOf("All")
+    }
+
     LazyColumn(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(comp.displayName, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(24.dp))
                 listOf("Download", "Installed").forEach { filter ->
@@ -365,38 +388,65 @@ private fun GenericComponentContent(comp: GNComponent, mgr: ContentsManager, isB
                         modifier = Modifier.padding(end = 12.dp)
                     )
                 }
+                
+                Spacer(Modifier.weight(1f))
+                
+                Box {
+                    OutlinedButton(
+                        onClick = { typeDropdownExpanded = true },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Text(selectedType)
+                        Icon(Icons.Default.ArrowDropDown, null)
+                    }
+                    DropdownMenu(
+                        expanded = typeDropdownExpanded,
+                        onDismissRequest = { typeDropdownExpanded = false },
+                        modifier = Modifier.background(Color(0xFF1A1A1A)).border(1.dp, Color.White.copy(alpha = 0.1f))
+                    ) {
+                        componentTypes.forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(type, color = Color.White) },
+                                onClick = { selectedType = type; typeDropdownExpanded = false }
+                            )
+                        }
+                    }
+                }
             }
         }
         
         if (isLoading) { item { Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } } }
         else {
-            val assets = releases.flatMap { rel -> 
-                rel.assets.filter { it.name.endsWith(".wcp") }
-                    .map { it.copy(releaseName = rel.tagName, releaseDate = rel.publishedAt) } 
+            val allAssets = if (selectedFilter == "Installed") {
+                installedProfiles.map { profile ->
+                    GHAsset(name = profile.verName, downloadUrl = "", releaseName = "Installed", releaseDate = "")
+                }
+            } else {
+                releases.flatMap { rel -> 
+                    rel.assets.filter { it.name.endsWith(".wcp") }
+                        .map { it.copy(releaseName = rel.tagName, releaseDate = rel.publishedAt) } 
+                }.filter { findInstalledProfile(it.name, installedProfiles) == null }
             }
 
-            val filteredAssets = assets.filter {
-                val isInstalled = findInstalledProfile(it.name, installedProfiles) != null
-                if (selectedFilter == "Installed") isInstalled else !isInstalled
-            }.sortedWith(compareBy<GHAsset> { getAssetCategory(it.name, comp) }.thenByDescending { it.releaseDate })
+            val filteredByType = allAssets.filter { asset ->
+                if (selectedType == "All") true
+                else asset.name.contains(selectedType, ignoreCase = true) || asset.releaseName.contains(selectedType, ignoreCase = true)
+            }
 
             val finalAssets = if (selectedFilter == "Download") {
-                // Filter nightlies to show only the latest of each type
-                val nightlies = filteredAssets.filter { it.name.contains("nightly", true) }
-                val nonNightlies = filteredAssets.filter { !it.name.contains("nightly", true) }
-                
-                val latestNightlies = nightlies.groupBy { 
-                    // Group by nightly type (e.g. dxvk-nvapi-nightly vs dxvk-nightly)
-                    it.name.substringBeforeLast("-") 
-                }.map { it.value.first() }
-                
+                val sorted = filteredByType.sortedWith(compareBy<GHAsset> { getAssetCategory(it.name, comp) }.thenByDescending { it.releaseDate })
+                val nightlies = sorted.filter { it.name.contains("nightly", true) }
+                val nonNightlies = sorted.filter { !it.name.contains("nightly", true) }
+                val latestNightlies = nightlies.groupBy { it.name.substringBeforeLast("-") }.map { it.value.first() }
                 (nonNightlies + latestNightlies).sortedWith(compareBy<GHAsset> { getAssetCategory(it.name, comp) }.thenByDescending { it.releaseDate })
-            } else filteredAssets
+            } else filteredByType
 
             if (finalAssets.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                        Text(if (selectedFilter == "Installed") "No components installed" else "All components installed", color = Color.White.copy(alpha = 0.5f))
+                        Text("No items found", color = Color.White.copy(alpha = 0.5f))
                     }
                 }
             } else {
@@ -405,7 +455,7 @@ private fun GenericComponentContent(comp: GNComponent, mgr: ContentsManager, isB
                     val isInstalled = profile != null
                     ComponentTile(
                         title = asset.name.removeSuffix(".wcp"),
-                        subtitle = formatRelativeTime(asset.releaseDate),
+                        subtitle = if (isInstalled) "Installed Version" else formatRelativeTime(asset.releaseDate),
                         isInstalled = isInstalled,
                         isBusy = isBusy,
                         onAction = { downloadAndInstall(context, mgr, asset, scope, setBusy, setWorkMsg, setProgress, refresh) },
@@ -517,13 +567,18 @@ private fun WineProtonContent(mgr: ContentsManager, isBusy: Boolean, setBusy: (B
     var isLoading by remember { mutableStateOf(true) }
     val installed = remember { mutableStateListOf<ContentProfile>() }
     var selectedFilter by rememberSaveable { mutableStateOf("Download") }
+    var selectedType by rememberSaveable { mutableStateOf("All") }
+    var typeDropdownExpanded by remember { mutableStateOf(false) }
 
     val refresh: () -> Unit = {
-        installed.clear()
-        val wine = mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_WINE)
-        val proton = mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON)
-        val combined = (wine ?: emptyList()) + (proton ?: emptyList())
-        installed.addAll(combined.filter { it.remoteUrl == null }.distinctBy { it.type.toString() + it.verName })
+        scope.launch(Dispatchers.IO) {
+            installed.clear()
+            val wine = mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_WINE)
+            val proton = mgr.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON)
+            val combined = (wine ?: emptyList()) + (proton ?: emptyList())
+            val filtered = combined.filter { it.remoteUrl == null }.distinctBy { it.type.toString() + it.verName }
+            withContext(Dispatchers.Main) { installed.addAll(filtered) }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -541,9 +596,11 @@ private fun WineProtonContent(mgr: ContentsManager, isBusy: Boolean, setBusy: (B
         }
     }
 
+    val wineTypes = listOf("All", "GE-Proton", "Wine-Staging", "Wine-Col", "Kron4ek", "Nightly")
+
     LazyColumn(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text("Wine / Proton", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(24.dp))
                 listOf("Download", "Installed").forEach { filter ->
@@ -555,29 +612,64 @@ private fun WineProtonContent(mgr: ContentsManager, isBusy: Boolean, setBusy: (B
                         modifier = Modifier.padding(end = 12.dp)
                     )
                 }
+                
+                Spacer(Modifier.weight(1f))
+                
+                Box {
+                    OutlinedButton(
+                        onClick = { typeDropdownExpanded = true },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    ) {
+                        Text(selectedType)
+                        Icon(Icons.Default.ArrowDropDown, null)
+                    }
+                    DropdownMenu(
+                        expanded = typeDropdownExpanded,
+                        onDismissRequest = { typeDropdownExpanded = false },
+                        modifier = Modifier.background(Color(0xFF1A1A1A)).border(1.dp, Color.White.copy(alpha = 0.1f))
+                    ) {
+                        wineTypes.forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(type, color = Color.White) },
+                                onClick = { selectedType = type; typeDropdownExpanded = false }
+                            )
+                        }
+                    }
+                }
             }
         }
 
         if (isLoading) { item { Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } } }
         else {
-            val filteredReleases = releases.filter { item ->
-                val isInstalled = installed.any { assetKeyMatchesExact(it.verName, item.fileName.removeSuffix(".wcp")) }
-                if (selectedFilter == "Installed") isInstalled else !isInstalled
-            }.sortedWith(compareBy<WineReleaseItem> { getWineCategory(it.name) }.thenByDescending { it.releaseDate })
+            val allItems = if (selectedFilter == "Installed") {
+                installed.map { profile ->
+                    WineReleaseItem(name = profile.verName, version = "", url = null, fileName = profile.verName, releaseDate = "", source = "Installed")
+                }
+            } else {
+                releases.filter { item ->
+                    installed.none { assetKeyMatchesExact(it.verName, item.fileName.removeSuffix(".wcp")) }
+                }
+            }
+
+            val filteredByType = allItems.filter { item ->
+                if (selectedType == "All") true
+                else item.name.contains(selectedType, ignoreCase = true) || item.fileName.contains(selectedType, ignoreCase = true)
+            }
 
             val finalReleases = if (selectedFilter == "Download") {
-                val nightlies = filteredReleases.filter { it.name.contains("nightly", true) }
-                val nonNightlies = filteredReleases.filter { !it.name.contains("nightly", true) }
-                
+                val sorted = filteredByType.sortedWith(compareBy<WineReleaseItem> { getWineCategory(it.name) }.thenByDescending { it.releaseDate })
+                val nightlies = sorted.filter { it.name.contains("nightly", true) }
+                val nonNightlies = sorted.filter { !it.name.contains("nightly", true) }
                 val latestNightlies = nightlies.groupBy { it.name.substringBeforeLast("-") }.map { it.value.first() }
-                
                 (nonNightlies + latestNightlies).sortedWith(compareBy<WineReleaseItem> { getWineCategory(it.name) }.thenByDescending { it.releaseDate })
-            } else filteredReleases
+            } else filteredByType
 
             if (finalReleases.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                        Text(if (selectedFilter == "Installed") "No versions installed" else "All versions installed", color = Color.White.copy(alpha = 0.5f))
+                        Text("No items found", color = Color.White.copy(alpha = 0.5f))
                     }
                 }
             } else {
@@ -589,7 +681,7 @@ private fun WineProtonContent(mgr: ContentsManager, isBusy: Boolean, setBusy: (B
 
                     ComponentTile(
                         title = item.name,
-                        subtitle = "[${item.source}] ${formatRelativeTime(item.releaseDate)}",
+                        subtitle = if (isInstalled) "Installed" else "[${item.source}] ${formatRelativeTime(item.releaseDate)}",
                         isInstalled = isInstalled,
                         isBusy = isBusy,
                         isUpgrade = isUpgrade,
