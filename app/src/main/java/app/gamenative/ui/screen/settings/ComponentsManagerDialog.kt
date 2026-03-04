@@ -354,9 +354,11 @@ private fun GenericComponentContent(comp: GNComponent, mgr: ContentsManager, isB
                         val all = parseGHReleases(resp.body?.string() ?: "[]")
                         val nPrefixes = nightlyPrefixes[comp] ?: emptyList()
                         val sPrefixes = stablePrefixes[comp] ?: emptyList()
+                        val extraPrefixes = if (comp == GNComponent.DXVK) listOf("dxvk", "gplasync") else emptyList()
+                        
                         withContext(Dispatchers.Main) { 
                             releases = all.filter { rel -> 
-                                (nPrefixes + sPrefixes).any { prefix -> rel.tagName.contains(prefix, true) || rel.assets.any { it.name.contains(prefix, true) } }
+                                (nPrefixes + sPrefixes + extraPrefixes).any { prefix -> rel.tagName.contains(prefix, true) || rel.assets.any { it.name.contains(prefix, true) } }
                             } 
                         }
                     }
@@ -444,12 +446,18 @@ private fun GenericComponentContent(comp: GNComponent, mgr: ContentsManager, isB
             val filteredByType = allAssets.filter { asset ->
                 val name = asset.name.lowercase()
                 val rel = asset.releaseName.lowercase()
+                val isNightly = name.contains("nightly", true) || name.contains("pre-reg", true) || rel.contains("nightly", true) || rel.contains("pre-reg", true)
+
                 when (selectedType) {
                     "All" -> true
-                    "Gplasync" -> (name.contains("gplasync") || rel.contains("gplasync")) && !name.contains("arm64ec") && !name.contains("nvapi")
-                    "Arm64EC" -> name.contains("arm64ec") && !name.contains("gplasync") && !name.contains("nvapi")
-                    "NVAPI" -> name.contains("nvapi") && !name.contains("arm64ec") && !name.contains("gplasync")
-                    else -> asset.name.contains(selectedType, ignoreCase = true) || asset.releaseName.contains(selectedType, ignoreCase = true)
+                    "Nightly" -> isNightly
+                    "Stable" -> !isNightly && (name.contains("stable", true) || rel.contains("stable", true))
+                    "Gplasync" -> !isNightly && (name.contains("gplasync", true) || rel.contains("gplasync", true)) && !name.contains("arm64ec") && !name.contains("nvapi")
+                    "Arm64EC" -> !isNightly && name.contains("arm64ec") && !name.contains("gplasync") && !name.contains("nvapi")
+                    "NVAPI" -> !isNightly && name.contains("nvapi") && !name.contains("arm64ec") && !name.contains("gplasync")
+                    "Sarek" -> !isNightly && name.contains("sarek", true)
+                    "Bionic" -> !isNightly && name.contains("bionic", true)
+                    else -> !isNightly && (asset.name.contains(selectedType, ignoreCase = true) || asset.releaseName.contains(selectedType, ignoreCase = true))
                 }
             }
 
@@ -693,8 +701,14 @@ private fun WineProtonContent(mgr: ContentsManager, isBusy: Boolean, setBusy: (B
             }
 
             val filteredByType = allItems.filter { item ->
+                val name = item.name.lowercase()
+                val isNightly = name.contains("nightly", true) || name.contains("pre-reg", true) || item.fileName.lowercase().contains("nightly", true)
+                
                 if (selectedType == "All") true
-                else item.name.contains(selectedType, ignoreCase = true) || item.fileName.contains(selectedType, ignoreCase = true)
+                else if (selectedType == "Nightly") isNightly
+                else {
+                    !isNightly && (item.name.contains(selectedType, ignoreCase = true) || item.fileName.contains(selectedType, ignoreCase = true))
+                }
             }
 
             val finalReleases = if (selectedFilter == "Download") {
@@ -748,29 +762,32 @@ private fun WineProtonContent(mgr: ContentsManager, isBusy: Boolean, setBusy: (B
 
 private fun getAssetCategory(name: String, comp: GNComponent): Int {
     val n = name.lowercase()
+    val isNightly = n.contains("nightly") || n.contains("pre-reg")
+    if (isNightly) return 10 
+
     if (comp == GNComponent.DXVK) {
         return when {
             n.contains("stable") -> 0
             n.contains("gplasync") -> 1
             n.contains("sarek") -> 2
             n.contains("nvapi") -> 3
-            n.contains("nightly") -> 4
             else -> 5
         }
     }
     return when {
         n.contains("stable") -> 0
-        n.contains("nightly") -> 4
         else -> 2
     }
 }
 
 private fun getWineCategory(name: String): Int {
     val n = name.lowercase()
+    if (n.contains("nightly") || n.contains("pre-reg")) return 10
     return when {
         n.contains("stable") -> 0
-        n.contains("nightly") -> 4
-        else -> 2
+        n.contains("ge-proton") -> 1
+        n.contains("staging") -> 2
+        else -> 3
     }
 }
 
@@ -971,14 +988,22 @@ private suspend fun <T> suspendInstallCallback(block: (ContentsManager.OnInstall
 }
 
 private fun compareVersions(v1: String, v2: String): Int {
-    val parts1 = v1.removeSuffix(".wcp").split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.map { it.toInt() }
-    val parts2 = v2.removeSuffix(".wcp").split(Regex("[^0-9]+")).filter { it.isNotEmpty() }.map { it.toInt() }
+    fun getParts(v: String): List<Int> = v.lowercase()
+        .removeSuffix(".wcp")
+        .split(Regex("[^0-9]+"))
+        .filter { it.isNotEmpty() }
+        .map { it.toInt() }
+
+    val parts1 = getParts(v1)
+    val parts2 = getParts(v2)
     
-    val length = minOf(parts1.size, parts2.size)
+    val length = maxOf(parts1.size, parts2.size)
     for (i in 0 until length) {
-        if (parts1[i] != parts2[i]) return parts1[i].compareTo(parts2[i])
+        val p1 = parts1.getOrNull(i) ?: 0
+        val p2 = parts2.getOrNull(i) ?: 0
+        if (p1 != p2) return p1.compareTo(p2)
     }
-    return parts1.size.compareTo(parts2.size)
+    return 0
 }
 
 private val nightlyPrefixes = mapOf(
